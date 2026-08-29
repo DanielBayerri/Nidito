@@ -182,6 +182,28 @@
     .card, .stat{transition:transform .15s ease, box-shadow .15s ease;}
   }
 
+  /* ---- resum / report view ---- */
+  .actions-row{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px;}
+  .table-scroll{overflow-x:auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow);}
+  table.report{width:100%; border-collapse:collapse; font-size:13px; white-space:nowrap;}
+  table.report th, table.report td{padding:9px 12px; text-align:right; border-bottom:1px solid var(--border);}
+  table.report th:first-child, table.report td:first-child{text-align:left; position:sticky; left:0; background:var(--surface);}
+  table.report thead th{color:var(--ink-muted); font-weight:600; font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; border-bottom:2px solid var(--border);}
+  table.report tbody tr:last-child td{border-bottom:none;}
+  table.report tr.total-row td{font-weight:700; background:var(--surface-2);}
+  table.report td.num, table.report th.num{font-family:'JetBrains Mono',ui-monospace,monospace; font-variant-numeric:tabular-nums;}
+  .delta{font-size:11px; margin-left:6px;}
+  .delta.up{color:var(--danger);} .delta.down{color:var(--good);}
+  .empty-note{color:var(--ink-muted); font-size:13.5px; padding:18px;}
+
+  @media print{
+    .no-print{display:none !important;}
+    body{background:#fff; color:#111;}
+    .wrap{padding:0; max-width:none;}
+    .table-scroll{box-shadow:none; border:1px solid #999;}
+    table.report th:first-child, table.report td:first-child{background:#fff;}
+  }
+
   /* ---- login screen ---- */
   #login-screen{
     min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:20px;
@@ -277,6 +299,7 @@ var state = null;
 var pendingDeletes = {};
 var saveTimer = null;
 var saveStatus = 'saving'; // saving | saved | offline
+var view = 'dashboard'; // dashboard | resum (per-viewer UI state, not synced)
 
 function esc(s){
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -306,24 +329,33 @@ function render(){
 }
 
 function template(){
-  var totalSalary = state.people.reduce(function(s,p){ return s + p.salary; }, 0);
-  var totalBudget = state.categories.reduce(function(s,c){ return s + c.budget; }, 0);
-  var totalBalance = state.categories.reduce(function(s,c){ return s + c.balance; }, 0);
-  var totalGoals = state.goals.reduce(function(s,g){ return s + g.saved; }, 0);
-  var periodLabel = MONTHS[state.period.monthIdx] + ' ' + state.period.year;
-
   var statusDot = saveStatus === 'offline' ? '<span class="dot warn"></span>Sense connexió — es sincronitzarà quan tornis a tenir internet'
     : saveStatus === 'saving' ? '<span class="dot warn"></span>Desant…'
     : '<span class="dot"></span>Desat i compartit';
 
+  var periodLabel = MONTHS[state.period.monthIdx] + ' ' + state.period.year;
+
   return ''
-  + '<div class="topbar">'
+  + '<div class="topbar no-print">'
     + '<div class="brand"><h1>Caixa Comuna</h1><p>Pressupost compartit per a dues persones</p></div>'
     + '<div class="period-control">'
       + '<span class="period-label">' + esc(periodLabel) + '</span>'
-      + '<button class="btn" data-action="advance-month">Mes següent →</button>'
+      + (view === 'dashboard'
+          ? '<button class="btn" data-action="advance-month">Mes següent →</button><button class="btn" data-action="view-resum">📊 Resum</button>'
+          : '<button class="btn" data-action="view-dashboard">← Tornar al pressupost</button>')
     + '</div>'
   + '</div>'
+  + (view === 'resum' ? resumTemplate() : dashboardTemplate())
+  + '<footer class="no-print">' + statusDot + '<button class="btn btn-ghost btn-sm" data-action="sign-out" type="button">Tanca sessió</button></footer>';
+}
+
+function dashboardTemplate(){
+  var totalSalary = state.people.reduce(function(s,p){ return s + p.salary; }, 0);
+  var totalBudget = state.categories.reduce(function(s,c){ return s + c.budget; }, 0);
+  var totalBalance = state.categories.reduce(function(s,c){ return s + c.balance; }, 0);
+  var totalGoals = state.goals.reduce(function(s,g){ return s + g.saved; }, 0);
+
+  return ''
   + '<div class="stats">'
     + stat('Ingressos totals', fmt(totalSalary))
     + stat('Pressupost conjunt', fmt(totalBudget))
@@ -340,8 +372,7 @@ function template(){
   + '<section class="block">'
     + '<div class="block-head"><h2>Diners personals</h2><span class="hint">Orientatiu — no cal quadrar-lo cada mes</span></div>'
     + '<div class="people-grid">' + state.people.map(personCard).join('') + '</div>'
-  + '</section>'
-  + '<footer>' + statusDot + '<button class="btn btn-ghost btn-sm" data-action="sign-out" type="button">Tanca sessió</button></footer>';
+  + '</section>';
 }
 
 function stat(label, value, cls){
@@ -430,6 +461,187 @@ function personCard(p){
   + '</div>';
 }
 
+// ---- resum / report ----
+
+function monthKey(iso){
+  var d = new Date(iso);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+function monthLabel(key){
+  var parts = key.split('-');
+  return MONTHS[parseInt(parts[1], 10) - 1] + ' ' + parts[0];
+}
+
+// Flat, chronological list of every recorded expense/transfer across all categories.
+function buildLedger(){
+  var rows = [];
+  state.categories.forEach(function(cat){
+    cat.expenses.forEach(function(e){
+      rows.push({
+        date: e.date,
+        month: monthKey(e.date),
+        categoryId: cat.id,
+        category: cat.name,
+        person: e.personId ? personName(e.personId) : '—',
+        note: e.note || '',
+        amount: e.amount,
+        goalId: e.goalId || null
+      });
+    });
+  });
+  rows.sort(function(a, b){ return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  return rows;
+}
+
+// { monthKey: { categoryId: totalSpent } }, plus the sorted list of month keys.
+function monthlyByCategory(){
+  var ledger = buildLedger();
+  var months = {};
+  ledger.forEach(function(r){
+    if (!months[r.month]) months[r.month] = {};
+    months[r.month][r.categoryId] = (months[r.month][r.categoryId] || 0) + r.amount;
+  });
+  var keys = Object.keys(months).sort();
+  return { keys: keys, months: months };
+}
+
+function monthlyByPerson(){
+  var ledger = buildLedger();
+  var months = {};
+  ledger.forEach(function(r){
+    if (r.person === '—') return;
+    if (!months[r.month]) months[r.month] = {};
+    months[r.month][r.person] = (months[r.month][r.person] || 0) + r.amount;
+  });
+  var keys = Object.keys(months).sort();
+  return { keys: keys, months: months };
+}
+
+function resumTemplate(){
+  var byCat = monthlyByCategory();
+  var byPerson = monthlyByPerson();
+  var totalIncome = state.people.reduce(function(s,p){ return s + p.salary; }, 0);
+  var totalBudget = state.categories.reduce(function(s,c){ return s + c.budget; }, 0);
+
+  if (byCat.keys.length === 0){
+    return '<section class="block">'
+      + '<div class="block-head"><h2>Resum</h2></div>'
+      + '<div class="empty-note">Encara no hi ha cap moviment registrat. En quan afegiu despeses, aquí apareixerà la comparació mes a mes.</div>'
+    + '</section>';
+  }
+
+  var catCols = state.categories;
+  var catTotals = {}; catCols.forEach(function(c){ catTotals[c.id] = 0; });
+  var grandTotal = 0;
+  var monthRows = byCat.keys.map(function(mk, idx){
+    var row = byCat.months[mk];
+    var rowTotal = 0;
+    var cells = catCols.map(function(c){
+      var v = row[c.id] || 0;
+      rowTotal += v;
+      catTotals[c.id] += v;
+      return '<td class="num">' + (v ? fmt(v) : '—') + '</td>';
+    });
+    grandTotal += rowTotal;
+    var prevTotal = idx > 0 ? sumRow(byCat.months[byCat.keys[idx-1]], catCols) : null;
+    var delta = '';
+    if (prevTotal !== null && prevTotal > 0){
+      var pct = Math.round((rowTotal - prevTotal) / prevTotal * 100);
+      if (pct !== 0) delta = '<span class="delta ' + (pct > 0 ? 'up' : 'down') + '">' + (pct > 0 ? '▲' : '▼') + Math.abs(pct) + '%</span>';
+    }
+    return '<tr><td>' + esc(monthLabel(mk)) + '</td>' + cells.join('') + '<td class="num"><b>' + fmt(rowTotal) + '</b>' + delta + '</td></tr>';
+  }).join('');
+
+  var footCells = catCols.map(function(c){ return '<td class="num">' + fmt(catTotals[c.id]) + '</td>'; }).join('');
+
+  var byCategoryTable = '<div class="table-scroll"><table class="report">'
+    + '<thead><tr><th>Mes</th>' + catCols.map(function(c){ return '<th class="num">' + c.icon + ' ' + esc(c.name) + '</th>'; }).join('') + '<th class="num">Total</th></tr></thead>'
+    + '<tbody>' + monthRows + '</tbody>'
+    + '<tfoot><tr class="total-row"><td>Total acumulat</td>' + footCells + '<td class="num">' + fmt(grandTotal) + '</td></tr></tfoot>'
+  + '</table></div>';
+
+  var personCols = state.people;
+  var personRows = byPerson.keys.map(function(mk){
+    var row = byPerson.months[mk] || {};
+    var cells = personCols.map(function(p){ return '<td class="num">' + (row[p.name] ? fmt(row[p.name]) : '—') + '</td>'; });
+    return '<tr><td>' + esc(monthLabel(mk)) + '</td>' + cells.join('') + '</tr>';
+  }).join('');
+  var byPersonTable = '<div class="table-scroll"><table class="report">'
+    + '<thead><tr><th>Mes</th>' + personCols.map(function(p){ return '<th class="num">' + esc(p.name) + '</th>'; }).join('') + '</tr></thead>'
+    + '<tbody>' + (personRows || '<tr><td colspan="' + (personCols.length+1) + '" class="empty-note">Sense dades</td></tr>') + '</tbody>'
+  + '</table></div>';
+
+  var fullLedger = buildLedger();
+  var goalSourceId = (state.categories.find(function(c){ return c.kind === 'goal-source'; }) || {}).id;
+  var goalRows = state.goals.map(function(g){
+    var contributions = fullLedger.filter(function(r){ return r.categoryId === goalSourceId && r.goalId === g.id; });
+    var lastDate = contributions.length ? monthLabel(monthKey(contributions[contributions.length-1].date)) : '—';
+    return '<tr><td>' + g.icon + ' ' + esc(g.name) + '</td><td class="num">' + fmt(g.saved) + '</td><td class="num">' + fmt(g.target) + '</td><td>' + contributions.length + ' aportacions · última: ' + lastDate + '</td></tr>';
+  }).join('');
+  var goalsTable = '<div class="table-scroll"><table class="report">'
+    + '<thead><tr><th>Objectiu</th><th class="num">Estalviat</th><th class="num">Meta</th><th>Historial</th></tr></thead>'
+    + '<tbody>' + goalRows + '</tbody>'
+  + '</table></div>';
+
+  return ''
+  + '<div class="actions-row no-print">'
+    + '<button class="btn btn-sm" data-action="export-ledger">⬇ Descarrega tots els moviments (CSV)</button>'
+    + '<button class="btn btn-sm" data-action="export-monthly">⬇ Descarrega resum mensual (CSV)</button>'
+    + '<button class="btn btn-sm" data-action="print-report">🖨 Imprimeix / desa en PDF</button>'
+  + '</div>'
+  + '<section class="block">'
+    + '<div class="block-head"><h2>Gastat per categoria i mes</h2><span class="hint">Ingressos actuals: ' + fmt(totalIncome) + ' / mes · Pressupost conjunt actual: ' + fmt(totalBudget) + ' / mes</span></div>'
+    + byCategoryTable
+  + '</section>'
+  + '<section class="block">'
+    + '<div class="block-head"><h2>Gastat per persona i mes</h2><span class="hint">Qui ha registrat cada moviment (independentment de qui el paga realment)</span></div>'
+    + byPersonTable
+  + '</section>'
+  + '<section class="block">'
+    + '<div class="block-head"><h2>Objectius al llarg del temps</h2></div>'
+    + goalsTable
+  + '</section>';
+}
+
+function sumRow(row, catCols){
+  if (!row) return 0;
+  return catCols.reduce(function(s, c){ return s + (row[c.id] || 0); }, 0);
+}
+
+function toCsvValue(v){
+  v = String(v == null ? '' : v);
+  if (/[",\n;]/.test(v)) v = '"' + v.replace(/"/g, '""') + '"';
+  return v;
+}
+function rowsToCsv(headers, rows){
+  return '﻿' + [headers.map(toCsvValue).join(',')].concat(rows.map(function(r){ return r.map(toCsvValue).join(','); })).join('\r\n');
+}
+function downloadFile(filename, content, mime){
+  var blob = new Blob([content], { type: mime || 'text/plain' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+}
+function exportLedger(){
+  var ledger = buildLedger();
+  var rows = ledger.map(function(r){
+    return [r.date.slice(0,10), monthLabel(r.month), r.category, r.person, r.note, r.amount.toFixed(2)];
+  });
+  downloadFile('caixa-comuna-moviments.csv', rowsToCsv(['Data','Mes','Categoria','Persona','Nota','Import'], rows), 'text/csv;charset=utf-8');
+}
+function exportMonthly(){
+  var byCat = monthlyByCategory();
+  var headers = ['Mes'].concat(state.categories.map(function(c){ return c.name; })).concat(['Total']);
+  var rows = byCat.keys.map(function(mk){
+    var row = byCat.months[mk];
+    var total = sumRow(row, state.categories);
+    return [monthLabel(mk)].concat(state.categories.map(function(c){ return (row[c.id]||0).toFixed(2); })).concat([total.toFixed(2)]);
+  });
+  downloadFile('caixa-comuna-resum-mensual.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8');
+}
+
 // ---- mutations ----
 
 function findCat(id){ return state.categories.find(function(c){ return c.id === id; }); }
@@ -465,7 +677,7 @@ function assignToGoal(goalId, amount){
   var pot = state.categories.find(function(c){ return c.kind === 'goal-source'; });
   if (!goal || !pot || !(amount > 0) || amount > pot.balance + 0.001) return;
   pot.balance -= amount;
-  pot.expenses.push({ id: uid('e'), amount: amount, note: '→ ' + goal.name, personId: null, date: new Date().toISOString() });
+  pot.expenses.push({ id: uid('e'), amount: amount, note: '→ ' + goal.name, personId: null, date: new Date().toISOString(), goalId: goalId });
   goal.saved += amount;
 }
 
@@ -530,6 +742,16 @@ app.addEventListener('click', function(e){
     }
   } else if (action === 'sign-out'){
     signOut(auth);
+  } else if (action === 'view-resum'){
+    view = 'resum'; render();
+  } else if (action === 'view-dashboard'){
+    view = 'dashboard'; render();
+  } else if (action === 'export-ledger'){
+    exportLedger();
+  } else if (action === 'export-monthly'){
+    exportMonthly();
+  } else if (action === 'print-report'){
+    window.print();
   }
 });
 
