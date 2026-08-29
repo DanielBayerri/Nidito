@@ -472,6 +472,32 @@ function monthLabel(key){
   return MONTHS[parseInt(parts[1], 10) - 1] + ' ' + parts[0];
 }
 
+// Backfills budget/salary history on any state that predates this feature
+// (or was just seeded), so every category/person always has a usable log.
+function normalizeState(s){
+  var now = new Date().toISOString();
+  s.categories.forEach(function(c){
+    if (!Array.isArray(c.budgetHistory) || !c.budgetHistory.length){
+      c.budgetHistory = [{ date: now, value: c.budget }];
+    }
+  });
+  s.people.forEach(function(p){
+    if (!Array.isArray(p.salaryHistory) || !p.salaryHistory.length){
+      p.salaryHistory = [{ date: now, value: p.salary }];
+    }
+  });
+  return s;
+}
+
+// What a budget/salary value effectively was during a given month: the most
+// recent logged value at or before that month (history is append-only, so
+// the last matching entry is always the latest one).
+function valueAtMonth(history, targetMonthKey){
+  var applicable = history.filter(function(h){ return monthKey(h.date) <= targetMonthKey; });
+  if (!applicable.length) return history.length ? history[0].value : 0;
+  return applicable[applicable.length - 1].value;
+}
+
 // Flat, chronological list of every recorded expense/transfer across all categories.
 function buildLedger(){
   var rows = [];
@@ -517,11 +543,31 @@ function monthlyByPerson(){
   return { keys: keys, months: months };
 }
 
+// Per month: real income and budget as they were AT THE TIME (via
+// valueAtMonth), real spending from the dated ledger, the resulting margin,
+// and how much went into savings goals that month.
+function monthlyGlobalSummary(){
+  var byCat = monthlyByCategory();
+  var fullLedger = buildLedger();
+  return byCat.keys.map(function(mk){
+    var spentTotal = sumRow(byCat.months[mk], state.categories);
+    var budgetTotal = state.categories.reduce(function(s,c){ return s + valueAtMonth(c.budgetHistory, mk); }, 0);
+    var incomeTotal = state.people.reduce(function(s,p){ return s + valueAtMonth(p.salaryHistory, mk); }, 0);
+    var goalContrib = fullLedger.filter(function(r){ return r.month === mk && r.goalId; }).reduce(function(s,r){ return s + r.amount; }, 0);
+    return {
+      month: mk,
+      income: incomeTotal,
+      budget: budgetTotal,
+      spent: spentTotal,
+      margin: incomeTotal - spentTotal,
+      goalContrib: goalContrib
+    };
+  });
+}
+
 function resumTemplate(){
   var byCat = monthlyByCategory();
   var byPerson = monthlyByPerson();
-  var totalIncome = state.people.reduce(function(s,p){ return s + p.salary; }, 0);
-  var totalBudget = state.categories.reduce(function(s,c){ return s + c.budget; }, 0);
 
   if (byCat.keys.length === 0){
     return '<section class="block">'
@@ -583,6 +629,21 @@ function resumTemplate(){
     + '<tbody>' + goalRows + '</tbody>'
   + '</table></div>';
 
+  var global = monthlyGlobalSummary();
+  var globalRows = global.map(function(g){
+    return '<tr><td>' + esc(monthLabel(g.month)) + '</td>'
+      + '<td class="num">' + fmt(g.income) + '</td>'
+      + '<td class="num">' + fmt(g.budget) + '</td>'
+      + '<td class="num">' + fmt(g.spent) + '</td>'
+      + '<td class="num" style="color:' + (g.margin < 0 ? 'var(--danger)' : 'var(--good)') + '">' + fmt(g.margin) + '</td>'
+      + '<td class="num">' + (g.goalContrib ? fmt(g.goalContrib) : '—') + '</td>'
+    + '</tr>';
+  }).join('');
+  var globalTable = '<div class="table-scroll"><table class="report">'
+    + '<thead><tr><th>Mes</th><th class="num">Ingressos</th><th class="num">Pressupost</th><th class="num">Gastat</th><th class="num">Marge</th><th class="num">A objectius</th></tr></thead>'
+    + '<tbody>' + globalRows + '</tbody>'
+  + '</table></div>';
+
   return ''
   + '<div class="actions-row no-print">'
     + '<button class="btn btn-sm" data-action="export-ledger">⬇ Descarrega tots els moviments (CSV)</button>'
@@ -590,7 +651,11 @@ function resumTemplate(){
     + '<button class="btn btn-sm" data-action="print-report">🖨 Imprimeix / desa en PDF</button>'
   + '</div>'
   + '<section class="block">'
-    + '<div class="block-head"><h2>Gastat per categoria i mes</h2><span class="hint">Ingressos actuals: ' + fmt(totalIncome) + ' / mes · Pressupost conjunt actual: ' + fmt(totalBudget) + ' / mes</span></div>'
+    + '<div class="block-head"><h2>Ingressos, pressupost i marge per mes</h2><span class="hint">Ingressos i pressupost tal com eren cada mes (no els actuals) · Marge = ingressos − gastat conjunta</span></div>'
+    + globalTable
+  + '</section>'
+  + '<section class="block">'
+    + '<div class="block-head"><h2>Gastat per categoria i mes</h2></div>'
     + byCategoryTable
   + '</section>'
   + '<section class="block">'
@@ -633,11 +698,16 @@ function exportLedger(){
 }
 function exportMonthly(){
   var byCat = monthlyByCategory();
-  var headers = ['Mes'].concat(state.categories.map(function(c){ return c.name; })).concat(['Total']);
+  var global = monthlyGlobalSummary();
+  var globalByMonth = {}; global.forEach(function(g){ globalByMonth[g.month] = g; });
+  var headers = ['Mes'].concat(state.categories.map(function(c){ return c.name; }))
+    .concat(['Gastat total', 'Pressupost del mes', 'Ingressos del mes', 'Marge', 'Assignat a objectius']);
   var rows = byCat.keys.map(function(mk){
     var row = byCat.months[mk];
-    var total = sumRow(row, state.categories);
-    return [monthLabel(mk)].concat(state.categories.map(function(c){ return (row[c.id]||0).toFixed(2); })).concat([total.toFixed(2)]);
+    var g = globalByMonth[mk];
+    return [monthLabel(mk)]
+      .concat(state.categories.map(function(c){ return (row[c.id]||0).toFixed(2); }))
+      .concat([g.spent.toFixed(2), g.budget.toFixed(2), g.income.toFixed(2), g.margin.toFixed(2), g.goalContrib.toFixed(2)]);
   });
   downloadFile('caixa-comuna-resum-mensual.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8');
 }
@@ -683,6 +753,20 @@ function assignToGoal(goalId, amount){
 
 function addGoal(){
   state.goals.push({ id: uid('g'), name: 'Nou objectiu', icon: '⭐', target: 5000, saved: 0 });
+}
+
+// Logging these as dated history (instead of just overwriting the current
+// value) is what lets the Resum view show what the budget/income actually
+// was in a given past month, not just what it is today.
+function setCategoryBudget(cat, value){
+  if (!cat || value === cat.budget) return;
+  cat.budget = value;
+  cat.budgetHistory.push({ date: new Date().toISOString(), value: value });
+}
+function setPersonSalary(person, value){
+  if (!person || value === person.salary) return;
+  person.salary = value;
+  person.salaryHistory.push({ date: new Date().toISOString(), value: value });
 }
 
 function deleteGoal(id){
@@ -760,11 +844,11 @@ app.addEventListener('change', function(e){
   var field = el.dataset.field;
   if (!field) return;
   if (field === 'cat-name'){ findCat(el.dataset.cat).name = el.value.trim() || 'Sense nom'; }
-  else if (field === 'cat-budget'){ findCat(el.dataset.cat).budget = Math.max(0, parseFloat(el.value) || 0); }
+  else if (field === 'cat-budget'){ setCategoryBudget(findCat(el.dataset.cat), Math.max(0, parseFloat(el.value) || 0)); }
   else if (field === 'goal-name'){ findGoal(el.dataset.goal).name = el.value.trim() || 'Sense nom'; }
   else if (field === 'goal-target'){ findGoal(el.dataset.goal).target = Math.max(0, parseFloat(el.value) || 0); }
   else if (field === 'person-name'){ findPerson(el.dataset.person).name = el.value.trim() || 'Sense nom'; }
-  else if (field === 'person-salary'){ findPerson(el.dataset.person).salary = Math.max(0, parseFloat(el.value) || 0); }
+  else if (field === 'person-salary'){ setPersonSalary(findPerson(el.dataset.person), Math.max(0, parseFloat(el.value) || 0)); }
   else if (field === 'person-share'){ findPerson(el.dataset.person).conjuntaShare = Math.max(0, parseFloat(el.value) || 0); }
   else if (field === 'person-savings'){ findPerson(el.dataset.person).savingsPct = clamp(parseFloat(el.value) || 0, 0, 100); }
   render(); persist();
@@ -779,13 +863,13 @@ onSnapshot(DOC_REF, function(snap){
     var remote = snap.data();
     if (JSON.stringify(remote) !== JSON.stringify(state)){
       applyingRemote = true;
-      state = remote;
+      state = normalizeState(remote);
       saveStatus = 'saved';
       render();
       applyingRemote = false;
     }
   } else if (state === null){
-    state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    state = normalizeState(JSON.parse(JSON.stringify(DEFAULT_STATE)));
     setDoc(DOC_REF, state);
     render();
   }
