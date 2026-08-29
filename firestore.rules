@@ -7,8 +7,8 @@ service cloud.firestore {
     match /budgets/{docId} {
       allow read, write: if request.auth != null
         && request.auth.token.email in [
-          'daniel@example.com',
-          'anna@example.com'
+          'bayerri4tgn@gmail.com',
+          'annap996@gmail.com'
         ];
     }
   }
