@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Only the two of you can read/write the shared budget document.
+    // Replace the two placeholder emails with your real Google account
+    // emails (the ones you'll use to sign in via Firebase Authentication).
+    match /budgets/{docId} {
+      allow read, write: if request.auth != null
+        && request.auth.token.email in [
+          'daniel@example.com',
+          'anna@example.com'
+        ];
+    }
+  }
+}

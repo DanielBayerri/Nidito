@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caixa Comuna</title>
+<meta name="theme-color" content="#8C6323">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Caixa Comuna">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5F6F1;
+    --surface:#FFFFFF;
+    --surface-2:#EDEFE7;
+    --border:#DEE2D6;
+    --ink:#20302B;
+    --ink-muted:#5C6B62;
+    --accent:#A9782E;
+    --accent-strong:#8C6323;
+    --accent-soft:#EFE2C9;
+    --good:#3F7A5C;
+    --good-soft:#E3EFE7;
+    --warn:#C97B2E;
+    --warn-soft:#F6E8D6;
+    --danger:#B54A3F;
+    --danger-soft:#F5E1DE;
+    --shadow: 0 1px 2px rgba(32,48,43,.06), 0 6px 20px rgba(32,48,43,.05);
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#12181A;
+      --surface:#1B2220;
+      --surface-2:#212925;
+      --border:#2B332F;
+      --ink:#E9ECE4;
+      --ink-muted:#98A39A;
+      --accent:#D3A855;
+      --accent-strong:#E4BB6E;
+      --accent-soft:#3A311D;
+      --good:#6BAE8B;
+      --good-soft:#1C2C24;
+      --warn:#E0A050;
+      --warn-soft:#332619;
+      --danger:#E0897C;
+      --danger-soft:#33201D;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#12181A;
+    --surface:#1B2220;
+    --surface-2:#212925;
+    --border:#2B332F;
+    --ink:#E9ECE4;
+    --ink-muted:#98A39A;
+    --accent:#D3A855;
+    --accent-strong:#E4BB6E;
+    --accent-soft:#3A311D;
+    --good:#6BAE8B;
+    --good-soft:#1C2C24;
+    --warn:#E0A050;
+    --warn-soft:#332619;
+    --danger:#E0897C;
+    --danger-soft:#33201D;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Manrope',ui-sans-serif,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    line-height:1.45;
+  }
+  ::selection{background:var(--accent-soft);}
+  h1,h2,h3{font-family:'Fraunces',ui-serif,Georgia,serif; text-wrap:balance; margin:0;}
+  .num{font-family:'JetBrains Mono',ui-monospace,monospace; font-variant-numeric:tabular-nums;}
+  button{font-family:inherit; cursor:pointer;}
+  input,select{font-family:inherit; color:inherit;}
+  a{color:var(--accent-strong);}
+
+  .wrap{max-width:1080px; margin:0 auto; padding:28px 20px 64px;}
+
+  .topbar{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:22px;}
+  .brand h1{font-size:28px; font-weight:600; letter-spacing:-0.01em;}
+  .brand p{margin:4px 0 0; color:var(--ink-muted); font-size:14px;}
+  .period-control{display:flex; align-items:center; gap:10px;}
+  .period-label{font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--ink-muted); background:var(--surface); border:1px solid var(--border); padding:6px 12px; border-radius:999px;}
+  .btn{
+    border:1px solid var(--border); background:var(--surface); color:var(--ink);
+    padding:8px 14px; border-radius:10px; font-size:14px; font-weight:600;
+    display:inline-flex; align-items:center; gap:6px; transition:border-color .15s, background .15s;
+  }
+  .btn:hover{border-color:var(--accent);}
+  .btn:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  .btn-primary{background:var(--accent-strong); border-color:var(--accent-strong); color:#fff;}
+  .btn-primary:hover{background:var(--accent);}
+  .btn-ghost{border-color:transparent; background:transparent; color:var(--ink-muted); padding:6px 8px;}
+  .btn-ghost:hover{color:var(--danger); border-color:var(--danger);}
+  .btn-sm{padding:5px 10px; font-size:13px; border-radius:8px;}
+
+  .banner{padding:10px 16px; border-radius:10px; font-size:13.5px; margin-bottom:18px; display:flex; align-items:center; gap:8px;}
+  .banner.offline{background:var(--warn-soft); color:var(--warn);}
+
+  .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin-bottom:28px;}
+  .stat{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; box-shadow:var(--shadow);}
+  .stat .label{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-muted); font-weight:600;}
+  .stat .value{font-size:24px; margin-top:6px; font-weight:600;}
+  .stat .value.good{color:var(--good);} .stat .value.danger{color:var(--danger);}
+
+  section.block{margin-bottom:34px;}
+  .block-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; gap:12px; flex-wrap:wrap;}
+  .block-head h2{font-size:20px; font-weight:600;}
+  .block-head .hint{font-size:13px; color:var(--ink-muted);}
+
+  .cat-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:16px;}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; display:flex; flex-direction:column; gap:12px;}
+  .cat-head{display:flex; align-items:center; gap:10px;}
+  .cat-icon{font-size:22px; line-height:1;}
+  .cat-name-input{border:none; background:transparent; font-weight:700; font-size:15.5px; width:100%; padding:2px 0; border-bottom:1px solid transparent;}
+  .cat-name-input:hover, .cat-name-input:focus{border-bottom:1px solid var(--border);}
+  .budget-row{display:flex; align-items:center; justify-content:space-between; font-size:12.5px; color:var(--ink-muted);}
+  .budget-row .budget-input{width:80px; text-align:right; border:none; background:transparent; color:var(--ink-muted); font-family:'JetBrains Mono',monospace; border-bottom:1px dashed var(--border);}
+  .progress{height:8px; border-radius:999px; background:var(--surface-2); overflow:hidden;}
+  .progress > i{display:block; height:100%; border-radius:999px; background:var(--good);}
+  .progress.warn > i{background:var(--warn);}
+  .progress.danger > i{background:var(--danger);}
+  .spent-line{display:flex; justify-content:space-between; font-size:12.5px; color:var(--ink-muted);}
+  .balance-line{display:flex; align-items:baseline; justify-content:space-between;}
+  .balance-line .big{font-size:22px; font-weight:700;}
+  .balance-line .cap{font-size:11.5px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:.05em;}
+
+  .quickadd{display:grid; grid-template-columns:1fr 1fr; gap:6px; background:var(--surface-2); border-radius:10px; padding:10px;}
+  .quickadd input, .quickadd select{background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:6px 8px; font-size:13px;}
+  .quickadd .full{grid-column:1/-1;}
+  .quickadd .row{grid-column:1/-1; display:flex; gap:6px;}
+  .quickadd .row input{flex:1;}
+
+  .exp-list{display:flex; flex-direction:column; gap:0; max-height:150px; overflow-y:auto; border-top:1px solid var(--border);}
+  .exp-row{display:flex; align-items:center; gap:8px; padding:7px 2px; border-bottom:1px solid var(--border); font-size:13px;}
+  .exp-row .who{width:20px; height:20px; border-radius:50%; background:var(--accent-soft); color:var(--accent-strong); font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .exp-row .note{flex:1; color:var(--ink-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .exp-row .amt{font-family:'JetBrains Mono',monospace; font-weight:600;}
+  .exp-row .del{background:none; border:none; color:var(--ink-muted); font-size:15px; padding:0 2px; flex-shrink:0;}
+  .exp-row .del:hover{color:var(--danger);}
+  .exp-row .del.confirm{color:var(--danger); font-size:11px; font-weight:700;}
+  .exp-empty{color:var(--ink-muted); font-size:12.5px; padding:8px 2px;}
+
+  .goal-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px;}
+  .goal-card .goal-top{display:flex; align-items:center; gap:8px;}
+  .goal-fields{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--ink-muted);}
+  .goal-fields input{width:76px; border:none; background:transparent; color:var(--ink-muted); font-family:'JetBrains Mono',monospace; text-align:right; border-bottom:1px dashed var(--border);}
+  .goal-saved{font-size:20px; font-weight:700;}
+  .assign-row{display:flex; gap:6px;}
+  .assign-row input{width:90px; border:1px solid var(--border); background:var(--surface); border-radius:7px; padding:5px 7px; font-size:13px;}
+  .pot-banner{background:var(--accent-soft); color:var(--accent-strong); border-radius:12px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;}
+  .pot-banner .big{font-size:20px; font-weight:700; font-family:'JetBrains Mono',monospace;}
+
+  .people-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px;}
+  .person-card{display:flex; flex-direction:column; gap:10px;}
+  .person-name{font-family:'Fraunces',serif; font-size:18px; font-weight:600; border:none; background:transparent; border-bottom:1px solid transparent; width:100%;}
+  .person-name:hover, .person-name:focus{border-bottom:1px solid var(--border);}
+  .field-row{display:flex; align-items:center; justify-content:space-between; font-size:13px; color:var(--ink-muted);}
+  .field-row input{width:90px; text-align:right; border:1px solid var(--border); background:var(--surface-2); border-radius:7px; padding:4px 8px; font-family:'JetBrains Mono',monospace; color:var(--ink);}
+  .split-bar{display:flex; height:10px; border-radius:999px; overflow:hidden; background:var(--surface-2);}
+  .split-bar .s1{background:var(--accent);} .split-bar .s2{background:var(--good);}
+  .split-legend{display:flex; justify-content:space-between; font-size:12px; color:var(--ink-muted);}
+  .split-legend b{color:var(--ink); font-family:'JetBrains Mono',monospace;}
+
+  footer{margin-top:40px; text-align:center; font-size:12.5px; color:var(--ink-muted); display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap;}
+  .dot{display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--good); margin-right:6px; vertical-align:middle;}
+  .dot.warn{background:var(--warn);} .dot.local{background:var(--ink-muted);}
+
+  @media (prefers-reduced-motion:no-preference){
+    .card, .stat{transition:transform .15s ease, box-shadow .15s ease;}
+  }
+
+  /* ---- login screen ---- */
+  #login-screen{
+    min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .login-card{
+    width:100%; max-width:340px; background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); box-shadow:var(--shadow); padding:28px 26px; display:flex; flex-direction:column; gap:16px;
+  }
+  .login-card h1{font-size:24px; text-align:center;}
+  .login-card p.sub{margin:0; text-align:center; color:var(--ink-muted); font-size:13.5px;}
+  .login-card label{font-size:12.5px; color:var(--ink-muted); font-weight:600; display:block; margin-bottom:4px;}
+  .login-card input{width:100%; border:1px solid var(--border); background:var(--surface-2); border-radius:9px; padding:10px 12px; font-size:15px;}
+  .login-card .field{margin-bottom:2px;}
+  .login-card .error{color:var(--danger); font-size:13px; min-height:1em;}
+  .login-card button{width:100%; padding:11px; font-size:15px; border-radius:9px;}
+  #app{display:none;}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <form class="login-card" id="login-form">
+    <h1>🐖 Caixa Comuna</h1>
+    <p class="sub">Inicia sessió per veure el pressupost compartit</p>
+    <div class="field">
+      <label for="login-email">Correu</label>
+      <input id="login-email" type="email" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="login-password">Contrasenya</label>
+      <input id="login-password" type="password" autocomplete="current-password" required>
+    </div>
+    <p class="error" id="login-error"></p>
+    <button class="btn btn-primary" type="submit" id="login-submit">Entra</button>
+  </form>
+</div>
+
+<div class="wrap" id="app"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+import {
+  getFirestore, doc, onSnapshot, setDoc, enableIndexedDbPersistence
+} from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+// ---------------------------------------------------------------
+// 1) Paste your Firebase project's config here (Firebase console ->
+//    Project settings -> General -> "Your apps" -> SDK setup and
+//    configuration -> Config). See README.md for the full walkthrough.
+// ---------------------------------------------------------------
+const firebaseConfig = {
+  apiKey: "PASTE_API_KEY",
+  authDomain: "PASTE_PROJECT_ID.firebaseapp.com",
+  projectId: "PASTE_PROJECT_ID",
+  storageBucket: "PASTE_PROJECT_ID.appspot.com",
+  messagingSenderId: "PASTE_SENDER_ID",
+  appId: "PASTE_APP_ID"
+};
+
+const DEFAULT_STATE = {
+  "period": { "monthIdx": 7, "year": 2026 },
+  "people": [
+    { "id": "p1", "name": "Daniel", "salary": 2100, "conjuntaShare": 1300, "savingsPct": 40 },
+    { "id": "p2", "name": "Anna", "salary": 2100, "conjuntaShare": 1300, "savingsPct": 40 }
+  ],
+  "categories": [
+    { "id": "c1", "name": "Casa, benzina i súper", "icon": "🏠", "budget": 1200, "balance": 1200, "expenses": [], "since": 0 },
+    { "id": "c2", "name": "Sortir en parella", "icon": "🍽️", "budget": 300, "balance": 300, "expenses": [], "since": 0 },
+    { "id": "c3", "name": "Viatges", "icon": "✈️", "budget": 500, "balance": 500, "expenses": [], "since": 0 },
+    { "id": "c4", "name": "Mascota", "icon": "🐾", "budget": 150, "balance": 150, "expenses": [], "since": 0 },
+    { "id": "c5", "name": "Objectius", "icon": "🎯", "budget": 450, "balance": 450, "expenses": [], "since": 0, "kind": "goal-source" }
+  ],
+  "goals": [
+    { "id": "g1", "name": "Casament", "icon": "💍", "target": 15000, "saved": 0 },
+    { "id": "g2", "name": "Casa / Cotxe", "icon": "🏡", "target": 20000, "saved": 0 },
+    { "id": "g3", "name": "Altres objectius", "icon": "⭐", "target": 5000, "saved": 0 }
+  ]
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
+try { await enableIndexedDbPersistence(db); } catch (e) { /* multiple tabs open, or unsupported browser: fine, just no offline cache */ }
+
+const DOC_REF = doc(db, 'budgets', 'shared');
+
+var MONTHS = ['Gener','Febrer','Març','Abril','Maig','Juny','Juliol','Agost','Setembre','Octubre','Novembre','Desembre'];
+
+var state = null;
+var pendingDeletes = {};
+var saveTimer = null;
+var saveStatus = 'saving'; // saving | saved | offline
+
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function fmt(n){
+  n = Math.round(Number(n) || 0);
+  return n.toLocaleString('de-DE') + ' €';
+}
+function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
+function uid(prefix){ return prefix + Math.random().toString(36).slice(2, 9); }
+function initials(name){
+  return (name || '?').trim().split(/\s+/).map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+}
+function personName(id){
+  var p = state.people.find(function(p){ return p.id === id; });
+  return p ? p.name : '';
+}
+function categorySpentThisPeriod(cat){
+  return cat.expenses.slice(cat.since).reduce(function(s,e){ return s + e.amount; }, 0);
+}
+
+function render(){
+  if (!state) return;
+  document.getElementById('app').innerHTML = template();
+}
+
+function template(){
+  var totalSalary = state.people.reduce(function(s,p){ return s + p.salary; }, 0);
+  var totalBudget = state.categories.reduce(function(s,c){ return s + c.budget; }, 0);
+  var totalBalance = state.categories.reduce(function(s,c){ return s + c.balance; }, 0);
+  var totalGoals = state.goals.reduce(function(s,g){ return s + g.saved; }, 0);
+  var periodLabel = MONTHS[state.period.monthIdx] + ' ' + state.period.year;
+
+  var statusDot = saveStatus === 'offline' ? '<span class="dot warn"></span>Sense connexió — es sincronitzarà quan tornis a tenir internet'
+    : saveStatus === 'saving' ? '<span class="dot warn"></span>Desant…'
+    : '<span class="dot"></span>Desat i compartit';
+
+  return ''
+  + '<div class="topbar">'
+    + '<div class="brand"><h1>Caixa Comuna</h1><p>Pressupost compartit per a dues persones</p></div>'
+    + '<div class="period-control">'
+      + '<span class="period-label">' + esc(periodLabel) + '</span>'
+      + '<button class="btn" data-action="advance-month">Mes següent →</button>'
+    + '</div>'
+  + '</div>'
+  + '<div class="stats">'
+    + stat('Ingressos totals', fmt(totalSalary))
+    + stat('Pressupost conjunt', fmt(totalBudget))
+    + stat('Disponible conjunt ara', fmt(totalBalance), totalBalance < 0 ? 'danger' : 'good')
+    + stat('Estalviat en objectius', fmt(totalGoals))
+  + '</div>'
+  + '<section class="block">'
+    + '<div class="block-head"><h2>Pots de la caixa conjunta</h2><span class="hint">El que no es gasta es queda acumulat pel mes següent</span></div>'
+    + '<div class="cat-grid">' + state.categories.map(categoryCard).join('') + '</div>'
+  + '</section>'
+  + '<section class="block">'
+    + goalsSection()
+  + '</section>'
+  + '<section class="block">'
+    + '<div class="block-head"><h2>Diners personals</h2><span class="hint">Orientatiu — no cal quadrar-lo cada mes</span></div>'
+    + '<div class="people-grid">' + state.people.map(personCard).join('') + '</div>'
+  + '</section>'
+  + '<footer>' + statusDot + '<button class="btn btn-ghost btn-sm" data-action="sign-out" type="button">Tanca sessió</button></footer>';
+}
+
+function stat(label, value, cls){
+  return '<div class="stat"><div class="label">' + esc(label) + '</div><div class="value num' + (cls?' '+cls:'') + '">' + value + '</div></div>';
+}
+
+function categoryCard(cat){
+  var spent = categorySpentThisPeriod(cat);
+  var pct = cat.budget > 0 ? clamp(spent / cat.budget, 0, 1.4) : 0;
+  var barCls = pct >= 1 ? 'danger' : pct >= 0.8 ? 'warn' : '';
+  var recent = cat.expenses.slice().reverse().slice(0, 6);
+  var isObjectius = cat.kind === 'goal-source';
+
+  return '<div class="card" data-cat="' + cat.id + '">'
+    + '<div class="cat-head"><span class="cat-icon">' + cat.icon + '</span>'
+      + '<input class="cat-name-input" data-field="cat-name" data-cat="' + cat.id + '" value="' + esc(cat.name) + '"></div>'
+    + '<div class="budget-row"><span>Pressupost mensual</span>'
+      + '<span><input class="budget-input num" type="number" min="0" step="10" data-field="cat-budget" data-cat="' + cat.id + '" value="' + cat.budget + '"> €</span></div>'
+    + '<div class="progress' + (barCls?' '+barCls:'') + '"><i style="width:' + Math.round(pct*100) + '%"></i></div>'
+    + '<div class="spent-line"><span>Gastat aquest mes</span><span class="num">' + fmt(spent) + ' / ' + fmt(cat.budget) + '</span></div>'
+    + '<div class="balance-line"><span class="cap">Disponible acumulat</span><span class="big num" style="' + (cat.balance<0?'color:var(--danger)':'') + '">' + fmt(cat.balance) + '</span></div>'
+    + quickAddForm(cat)
+    + (isObjectius ? '<button class="btn btn-sm" data-action="noop">Assigna diners des de les targetes d’objectius, a sota →</button>' : '')
+    + '<div class="exp-list">' + (recent.length ? recent.map(function(e){ return expenseRow(cat.id, e); }).join('') : '<div class="exp-empty">Cap moviment encara aquest mes.</div>') + '</div>'
+  + '</div>';
+}
+
+function quickAddForm(cat){
+  var opts = state.people.map(function(p){ return '<option value="' + p.id + '">' + esc(p.name) + '</option>'; }).join('');
+  return '<form class="quickadd" data-action="add-expense" data-cat="' + cat.id + '">'
+    + '<input type="number" step="0.01" min="0" placeholder="Import €" name="amount" required>'
+    + '<select name="person">' + opts + '</select>'
+    + '<div class="row"><input type="text" placeholder="Nota (opcional)" name="note">'
+    + '<button class="btn btn-sm btn-primary" type="submit">+ Afegir</button></div>'
+  + '</form>';
+}
+
+function expenseRow(catId, e){
+  var pending = pendingDeletes[e.id];
+  return '<div class="exp-row">'
+    + '<span class="who">' + esc(initials(personName(e.personId))) + '</span>'
+    + '<span class="note">' + esc(e.note || '—') + '</span>'
+    + '<span class="amt">' + fmt(e.amount) + '</span>'
+    + '<button class="del' + (pending?' confirm':'') + '" data-action="delete-expense" data-cat="' + catId + '" data-exp="' + e.id + '">' + (pending ? 'Segur?' : '×') + '</button>'
+  + '</div>';
+}
+
+function goalsSection(){
+  var objectius = state.categories.find(function(c){ return c.kind === 'goal-source'; });
+  var pot = objectius ? objectius.balance : 0;
+  return '<div class="block-head"><h2>Objectius</h2><span class="hint">El pot d’objectius es reparteix entre aquestes metes</span></div>'
+    + '<div class="pot-banner"><span>Pot disponible per assignar</span><span class="big">' + fmt(pot) + '</span></div>'
+    + '<div class="goal-grid">' + state.goals.map(goalCard).join('') + '<button class="btn" data-action="add-goal" style="align-self:flex-start;">+ Nou objectiu</button></div>';
+}
+
+function goalCard(g){
+  var pct = g.target > 0 ? clamp(g.saved / g.target, 0, 1) : 0;
+  var pending = pendingDeletes[g.id];
+  return '<div class="card goal-card" data-goal="' + g.id + '">'
+    + '<div class="goal-top"><span class="cat-icon">' + g.icon + '</span>'
+      + '<input class="cat-name-input" data-field="goal-name" data-goal="' + g.id + '" value="' + esc(g.name) + '">'
+      + '<button class="del' + (pending?' confirm':'') + '" data-action="delete-goal" data-goal="' + g.id + '">' + (pending?'Segur?':'×') + '</button></div>'
+    + '<div class="goal-fields"><span>Objectiu</span><input type="number" min="0" step="100" data-field="goal-target" data-goal="' + g.id + '" value="' + g.target + '"> €</div>'
+    + '<div class="goal-saved num">' + fmt(g.saved) + ' <span style="font-size:12.5px;color:var(--ink-muted);font-weight:400;">de ' + fmt(g.target) + '</span></div>'
+    + '<div class="progress"><i style="width:' + Math.round(pct*100) + '%"></i></div>'
+    + '<form class="assign-row" data-action="assign-goal" data-goal="' + g.id + '">'
+      + '<input type="number" step="0.01" min="0" placeholder="Import €" name="amount" required>'
+      + '<button class="btn btn-sm" type="submit">Assignar</button>'
+    + '</form>'
+  + '</div>';
+}
+
+function personCard(p){
+  var contrib = clamp(p.conjuntaShare, 0, p.salary);
+  var personal = p.salary - contrib;
+  var estalvi = Math.round(personal * (p.savingsPct/100));
+  var gastar = personal - estalvi;
+  var pct = personal > 0 ? Math.round((gastar/personal)*100) : 0;
+  return '<div class="card person-card">'
+    + '<input class="person-name" data-field="person-name" data-person="' + p.id + '" value="' + esc(p.name) + '">'
+    + '<div class="field-row"><span>Sou net / mes</span><input type="number" min="0" step="10" data-field="person-salary" data-person="' + p.id + '" value="' + p.salary + '"></div>'
+    + '<div class="field-row"><span>Aportació a la conjunta</span><input type="number" min="0" step="10" data-field="person-share" data-person="' + p.id + '" value="' + p.conjuntaShare + '"></div>'
+    + '<div class="field-row"><span>% personal per gastar</span><input type="number" min="0" max="100" step="5" data-field="person-savings" data-person="' + p.id + '" value="' + p.savingsPct + '"></div>'
+    + '<div class="split-bar"><div class="s1" style="width:' + pct + '%"></div><div class="s2" style="width:' + (100-pct) + '%"></div></div>'
+    + '<div class="split-legend"><span>Per gastar <b class="num">' + fmt(gastar) + '</b></span><span>Estalvi <b class="num">' + fmt(estalvi) + '</b></span></div>'
+  + '</div>';
+}
+
+// ---- mutations ----
+
+function findCat(id){ return state.categories.find(function(c){ return c.id === id; }); }
+function findGoal(id){ return state.goals.find(function(g){ return g.id === id; }); }
+function findPerson(id){ return state.people.find(function(p){ return p.id === id; }); }
+
+function addExpense(catId, amount, note, personId){
+  var cat = findCat(catId);
+  if (!cat || !(amount > 0)) return;
+  cat.expenses.push({ id: uid('e'), amount: amount, note: note, personId: personId, date: new Date().toISOString() });
+  cat.balance -= amount;
+}
+
+function deleteExpense(catId, expId){
+  var cat = findCat(catId);
+  if (!cat) return;
+  var idx = cat.expenses.findIndex(function(e){ return e.id === expId; });
+  if (idx === -1) return;
+  var wasHistoric = idx < cat.since;
+  cat.balance += cat.expenses[idx].amount;
+  cat.expenses.splice(idx, 1);
+  if (wasHistoric) cat.since -= 1;
+}
+
+function advanceMonth(){
+  state.period.monthIdx++;
+  if (state.period.monthIdx > 11){ state.period.monthIdx = 0; state.period.year++; }
+  state.categories.forEach(function(c){ c.balance += c.budget; c.since = c.expenses.length; });
+}
+
+function assignToGoal(goalId, amount){
+  var goal = findGoal(goalId);
+  var pot = state.categories.find(function(c){ return c.kind === 'goal-source'; });
+  if (!goal || !pot || !(amount > 0) || amount > pot.balance + 0.001) return;
+  pot.balance -= amount;
+  pot.expenses.push({ id: uid('e'), amount: amount, note: '→ ' + goal.name, personId: null, date: new Date().toISOString() });
+  goal.saved += amount;
+}
+
+function addGoal(){
+  state.goals.push({ id: uid('g'), name: 'Nou objectiu', icon: '⭐', target: 5000, saved: 0 });
+}
+
+function deleteGoal(id){
+  state.goals = state.goals.filter(function(g){ return g.id !== id; });
+}
+
+// ---- events (delegated on #app, attached once) ----
+
+var app = document.getElementById('app');
+
+app.addEventListener('submit', function(e){
+  var form = e.target;
+  if (form.matches('[data-action="add-expense"]')){
+    e.preventDefault();
+    var amount = parseFloat(form.elements.amount.value);
+    var note = form.elements.note.value.trim();
+    var personId = form.elements.person.value;
+    addExpense(form.dataset.cat, amount, note, personId);
+    render(); persist();
+  } else if (form.matches('[data-action="assign-goal"]')){
+    e.preventDefault();
+    var amt = parseFloat(form.elements.amount.value);
+    assignToGoal(form.dataset.goal, amt);
+    render(); persist();
+  }
+});
+
+app.addEventListener('click', function(e){
+  var btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  var action = btn.dataset.action;
+  if (action === 'advance-month'){
+    advanceMonth(); render(); persist();
+  } else if (action === 'add-goal'){
+    addGoal(); render(); persist();
+  } else if (action === 'delete-expense'){
+    var key = btn.dataset.exp;
+    if (pendingDeletes[key]){
+      delete pendingDeletes[key];
+      deleteExpense(btn.dataset.cat, key);
+      render(); persist();
+    } else {
+      pendingDeletes[key] = true;
+      render();
+      setTimeout(function(){ delete pendingDeletes[key]; render(); }, 4000);
+    }
+  } else if (action === 'delete-goal'){
+    var gkey = btn.dataset.goal;
+    if (pendingDeletes[gkey]){
+      delete pendingDeletes[gkey];
+      deleteGoal(gkey);
+      render(); persist();
+    } else {
+      pendingDeletes[gkey] = true;
+      render();
+      setTimeout(function(){ delete pendingDeletes[gkey]; render(); }, 4000);
+    }
+  } else if (action === 'sign-out'){
+    signOut(auth);
+  }
+});
+
+app.addEventListener('change', function(e){
+  var el = e.target;
+  var field = el.dataset.field;
+  if (!field) return;
+  if (field === 'cat-name'){ findCat(el.dataset.cat).name = el.value.trim() || 'Sense nom'; }
+  else if (field === 'cat-budget'){ findCat(el.dataset.cat).budget = Math.max(0, parseFloat(el.value) || 0); }
+  else if (field === 'goal-name'){ findGoal(el.dataset.goal).name = el.value.trim() || 'Sense nom'; }
+  else if (field === 'goal-target'){ findGoal(el.dataset.goal).target = Math.max(0, parseFloat(el.value) || 0); }
+  else if (field === 'person-name'){ findPerson(el.dataset.person).name = el.value.trim() || 'Sense nom'; }
+  else if (field === 'person-salary'){ findPerson(el.dataset.person).salary = Math.max(0, parseFloat(el.value) || 0); }
+  else if (field === 'person-share'){ findPerson(el.dataset.person).conjuntaShare = Math.max(0, parseFloat(el.value) || 0); }
+  else if (field === 'person-savings'){ findPerson(el.dataset.person).savingsPct = clamp(parseFloat(el.value) || 0, 0, 100); }
+  render(); persist();
+});
+
+// ---- Firestore sync ----
+
+var applyingRemote = false;
+
+onSnapshot(DOC_REF, function(snap){
+  if (snap.exists()){
+    var remote = snap.data();
+    if (JSON.stringify(remote) !== JSON.stringify(state)){
+      applyingRemote = true;
+      state = remote;
+      saveStatus = 'saved';
+      render();
+      applyingRemote = false;
+    }
+  } else if (state === null){
+    state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+    setDoc(DOC_REF, state);
+    render();
+  }
+}, function(){
+  saveStatus = 'offline';
+  render();
+});
+
+function persist(){
+  if (applyingRemote) return;
+  saveStatus = 'saving';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function(){
+    setDoc(DOC_REF, state).then(function(){
+      saveStatus = 'saved'; render();
+    }).catch(function(){
+      saveStatus = 'offline'; render();
+    });
+  }, 400);
+}
+
+// ---- auth ----
+
+var loginScreen = document.getElementById('login-screen');
+var loginForm = document.getElementById('login-form');
+var loginError = document.getElementById('login-error');
+var loginSubmit = document.getElementById('login-submit');
+
+loginForm.addEventListener('submit', function(e){
+  e.preventDefault();
+  loginError.textContent = '';
+  loginSubmit.disabled = true;
+  loginSubmit.textContent = 'Entrant…';
+  var email = document.getElementById('login-email').value.trim();
+  var password = document.getElementById('login-password').value;
+  signInWithEmailAndPassword(auth, email, password).catch(function(err){
+    loginError.textContent = 'Correu o contrasenya incorrectes.';
+  }).finally(function(){
+    loginSubmit.disabled = false;
+    loginSubmit.textContent = 'Entra';
+  });
+});
+
+onAuthStateChanged(auth, function(user){
+  loginScreen.style.display = user ? 'none' : 'flex';
+  app.style.display = user ? 'block' : 'none';
+  if (user) render();
+});
+</script>
+</body>
+</html>

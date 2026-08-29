@@ -1,0 +1,9 @@
+{
+  "name": "Caixa Comuna",
+  "short_name": "Caixa Comuna",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F5F6F1",
+  "theme_color": "#8C6323",
+  "icons": []
+}
