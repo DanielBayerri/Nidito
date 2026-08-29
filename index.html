@@ -324,8 +324,12 @@ function categorySpentThisPeriod(cat){
 }
 
 function render(){
-  if (!state) return;
-  document.getElementById('app').innerHTML = template();
+  var el = document.getElementById('app');
+  if (!state){
+    el.innerHTML = '<p style="text-align:center; color:var(--ink-muted); padding:60px 20px;">Carregant…</p>';
+    return;
+  }
+  el.innerHTML = template();
 }
 
 function template(){
@@ -855,28 +859,38 @@ app.addEventListener('change', function(e){
 });
 
 // ---- Firestore sync ----
+//
+// Subscribed only once a user is signed in (see onAuthStateChanged below) —
+// our Firestore rules require request.auth != null, so subscribing earlier
+// gets a permission-denied that Firestore does NOT auto-retry once you sign
+// in afterwards, which is why the page used to need a manual refresh after
+// login to actually show any data.
 
 var applyingRemote = false;
+var unsubscribeSnapshot = null;
 
-onSnapshot(DOC_REF, function(snap){
-  if (snap.exists()){
-    var remote = snap.data();
-    if (JSON.stringify(remote) !== JSON.stringify(state)){
-      applyingRemote = true;
-      state = normalizeState(remote);
-      saveStatus = 'saved';
+function subscribeToBudget(){
+  if (unsubscribeSnapshot) return;
+  unsubscribeSnapshot = onSnapshot(DOC_REF, function(snap){
+    if (snap.exists()){
+      var remote = snap.data();
+      if (JSON.stringify(remote) !== JSON.stringify(state)){
+        applyingRemote = true;
+        state = normalizeState(remote);
+        saveStatus = 'saved';
+        render();
+        applyingRemote = false;
+      }
+    } else if (state === null){
+      state = normalizeState(JSON.parse(JSON.stringify(DEFAULT_STATE)));
+      setDoc(DOC_REF, state);
       render();
-      applyingRemote = false;
     }
-  } else if (state === null){
-    state = normalizeState(JSON.parse(JSON.stringify(DEFAULT_STATE)));
-    setDoc(DOC_REF, state);
+  }, function(){
+    saveStatus = 'offline';
     render();
-  }
-}, function(){
-  saveStatus = 'offline';
-  render();
-});
+  });
+}
 
 function persist(){
   if (applyingRemote) return;
@@ -916,7 +930,15 @@ loginForm.addEventListener('submit', function(e){
 onAuthStateChanged(auth, function(user){
   loginScreen.style.display = user ? 'none' : 'flex';
   app.style.display = user ? 'block' : 'none';
-  if (user) render();
+  if (user){
+    subscribeToBudget();
+    render();
+  } else if (unsubscribeSnapshot){
+    unsubscribeSnapshot();
+    unsubscribeSnapshot = null;
+    state = null;
+    saveStatus = 'saving';
+  }
 });
 </script>
 </body>
