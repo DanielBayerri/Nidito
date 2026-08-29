@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Caixa Comuna</title>
 <meta name="theme-color" content="#8C6323">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -267,17 +270,16 @@ const firebaseConfig = {
 };
 
 const DEFAULT_STATE = {
-  "period": { "monthIdx": 7, "year": 2026 },
   "people": [
     { "id": "p1", "name": "Daniel", "salary": 2100, "conjuntaShare": 1300, "savingsPct": 40 },
     { "id": "p2", "name": "Anna", "salary": 2100, "conjuntaShare": 1300, "savingsPct": 40 }
   ],
   "categories": [
-    { "id": "c1", "name": "Casa, benzina i súper", "icon": "🏠", "budget": 1200, "balance": 1200, "expenses": [], "since": 0 },
-    { "id": "c2", "name": "Sortir en parella", "icon": "🍽️", "budget": 300, "balance": 300, "expenses": [], "since": 0 },
-    { "id": "c3", "name": "Viatges", "icon": "✈️", "budget": 500, "balance": 500, "expenses": [], "since": 0 },
-    { "id": "c4", "name": "Mascota", "icon": "🐾", "budget": 150, "balance": 150, "expenses": [], "since": 0 },
-    { "id": "c5", "name": "Objectius", "icon": "🎯", "budget": 450, "balance": 450, "expenses": [], "since": 0, "kind": "goal-source" }
+    { "id": "c1", "name": "Casa, benzina i súper", "icon": "🏠", "budget": 1200, "expenses": [] },
+    { "id": "c2", "name": "Sortir en parella", "icon": "🍽️", "budget": 300, "expenses": [] },
+    { "id": "c3", "name": "Viatges", "icon": "✈️", "budget": 500, "expenses": [] },
+    { "id": "c4", "name": "Mascota", "icon": "🐾", "budget": 150, "expenses": [] },
+    { "id": "c5", "name": "Objectius", "icon": "🎯", "budget": 450, "expenses": [], "kind": "goal-source" }
   ],
   "goals": [
     { "id": "g1", "name": "Casament", "icon": "💍", "target": 15000, "saved": 0 },
@@ -319,8 +321,39 @@ function personName(id){
   var p = state.people.find(function(p){ return p.id === id; });
   return p ? p.name : '';
 }
-function categorySpentThisPeriod(cat){
-  return cat.expenses.slice(cat.since).reduce(function(s,e){ return s + e.amount; }, 0);
+function currentMonthKey(){ return monthKey(new Date().toISOString()); }
+
+function categorySpentInMonth(cat, mk){
+  return cat.expenses.reduce(function(s,e){ return monthKey(e.date) === mk ? s + e.amount : s; }, 0);
+}
+
+// The month a category's history starts from — its budget is assumed
+// constant (equal to that first value) for any earlier month we might ask about.
+function categoryStartMonth(cat){
+  return cat.budgetHistory.length ? monthKey(cat.budgetHistory[0].date) : currentMonthKey();
+}
+
+function allMonthsBetween(startKey, endKey){
+  var months = [];
+  var sy = parseInt(startKey.slice(0,4), 10), sm = parseInt(startKey.slice(5,7), 10);
+  var ey = parseInt(endKey.slice(0,4), 10), em = parseInt(endKey.slice(5,7), 10);
+  var y = sy, m = sm;
+  while (y < ey || (y === ey && m <= em)){
+    months.push(y + '-' + String(m).padStart(2, '0'));
+    m++; if (m > 12){ m = 1; y++; }
+  }
+  return months;
+}
+
+// The whole point of this: "disponible acumulat" is never mutated or
+// advanced by hand — it's always recomputed from the real budget history and
+// the real dated expenses, for whatever the real current month is. So there
+// is nothing to "go back" on, and nothing that can get out of sync.
+function categoryAccumulatedBalance(cat, uptoMonthKey){
+  var months = allMonthsBetween(categoryStartMonth(cat), uptoMonthKey);
+  var totalBudgeted = months.reduce(function(s, mk){ return s + valueAtMonth(cat.budgetHistory, mk); }, 0);
+  var totalSpent = cat.expenses.reduce(function(s, e){ return monthKey(e.date) <= uptoMonthKey ? s + e.amount : s; }, 0);
+  return totalBudgeted - totalSpent;
 }
 
 function render(){
@@ -337,7 +370,8 @@ function template(){
     : saveStatus === 'saving' ? '<span class="dot warn"></span>Desant…'
     : '<span class="dot"></span>Desat i compartit';
 
-  var periodLabel = MONTHS[state.period.monthIdx] + ' ' + state.period.year;
+  var mk = currentMonthKey();
+  var periodLabel = monthLabel(mk);
 
   return ''
   + '<div class="topbar no-print">'
@@ -345,18 +379,18 @@ function template(){
     + '<div class="period-control">'
       + '<span class="period-label">' + esc(periodLabel) + '</span>'
       + (view === 'dashboard'
-          ? '<button class="btn" data-action="advance-month">Mes següent →</button><button class="btn" data-action="view-resum">📊 Resum</button>'
+          ? '<button class="btn" data-action="view-resum">📊 Resum</button>'
           : '<button class="btn" data-action="view-dashboard">← Tornar al pressupost</button>')
     + '</div>'
   + '</div>'
-  + (view === 'resum' ? resumTemplate() : dashboardTemplate())
+  + (view === 'resum' ? resumTemplate() : dashboardTemplate(mk))
   + '<footer class="no-print">' + statusDot + '<button class="btn btn-ghost btn-sm" data-action="sign-out" type="button">Tanca sessió</button></footer>';
 }
 
-function dashboardTemplate(){
+function dashboardTemplate(mk){
   var totalSalary = state.people.reduce(function(s,p){ return s + p.salary; }, 0);
-  var totalBudget = state.categories.reduce(function(s,c){ return s + c.budget; }, 0);
-  var totalBalance = state.categories.reduce(function(s,c){ return s + c.balance; }, 0);
+  var totalBudget = state.categories.reduce(function(s,c){ return s + valueAtMonth(c.budgetHistory, mk); }, 0);
+  var totalBalance = state.categories.reduce(function(s,c){ return s + categoryAccumulatedBalance(c, mk); }, 0);
   var totalGoals = state.goals.reduce(function(s,g){ return s + g.saved; }, 0);
 
   return ''
@@ -367,11 +401,11 @@ function dashboardTemplate(){
     + stat('Estalviat en objectius', fmt(totalGoals))
   + '</div>'
   + '<section class="block">'
-    + '<div class="block-head"><h2>Pots de la caixa conjunta</h2><span class="hint">El que no es gasta es queda acumulat pel mes següent</span></div>'
-    + '<div class="cat-grid">' + state.categories.map(categoryCard).join('') + '</div>'
+    + '<div class="block-head"><h2>Pots de la caixa conjunta</h2><span class="hint">El que no es gasta es queda acumulat automàticament pel mes següent</span></div>'
+    + '<div class="cat-grid">' + state.categories.map(function(c){ return categoryCard(c, mk); }).join('') + '</div>'
   + '</section>'
   + '<section class="block">'
-    + goalsSection()
+    + goalsSection(mk)
   + '</section>'
   + '<section class="block">'
     + '<div class="block-head"><h2>Diners personals</h2><span class="hint">Orientatiu — no cal quadrar-lo cada mes</span></div>'
@@ -383,11 +417,13 @@ function stat(label, value, cls){
   return '<div class="stat"><div class="label">' + esc(label) + '</div><div class="value num' + (cls?' '+cls:'') + '">' + value + '</div></div>';
 }
 
-function categoryCard(cat){
-  var spent = categorySpentThisPeriod(cat);
-  var pct = cat.budget > 0 ? clamp(spent / cat.budget, 0, 1.4) : 0;
+function categoryCard(cat, mk){
+  var spent = categorySpentInMonth(cat, mk);
+  var budgetNow = valueAtMonth(cat.budgetHistory, mk);
+  var balance = categoryAccumulatedBalance(cat, mk);
+  var pct = budgetNow > 0 ? clamp(spent / budgetNow, 0, 1.4) : 0;
   var barCls = pct >= 1 ? 'danger' : pct >= 0.8 ? 'warn' : '';
-  var recent = cat.expenses.slice().reverse().slice(0, 6);
+  var recent = cat.expenses.filter(function(e){ return monthKey(e.date) === mk; }).slice().reverse().slice(0, 6);
   var isObjectius = cat.kind === 'goal-source';
 
   return '<div class="card" data-cat="' + cat.id + '">'
@@ -396,8 +432,8 @@ function categoryCard(cat){
     + '<div class="budget-row"><span>Pressupost mensual</span>'
       + '<span><input class="budget-input num" type="number" min="0" step="10" data-field="cat-budget" data-cat="' + cat.id + '" value="' + cat.budget + '"> €</span></div>'
     + '<div class="progress' + (barCls?' '+barCls:'') + '"><i style="width:' + Math.round(pct*100) + '%"></i></div>'
-    + '<div class="spent-line"><span>Gastat aquest mes</span><span class="num">' + fmt(spent) + ' / ' + fmt(cat.budget) + '</span></div>'
-    + '<div class="balance-line"><span class="cap">Disponible acumulat</span><span class="big num" style="' + (cat.balance<0?'color:var(--danger)':'') + '">' + fmt(cat.balance) + '</span></div>'
+    + '<div class="spent-line"><span>Gastat aquest mes</span><span class="num">' + fmt(spent) + ' / ' + fmt(budgetNow) + '</span></div>'
+    + '<div class="balance-line"><span class="cap">Disponible acumulat</span><span class="big num" style="' + (balance<0?'color:var(--danger)':'') + '">' + fmt(balance) + '</span></div>'
     + quickAddForm(cat)
     + (isObjectius ? '<button class="btn btn-sm" data-action="noop">Assigna diners des de les targetes d’objectius, a sota →</button>' : '')
     + '<div class="exp-list">' + (recent.length ? recent.map(function(e){ return expenseRow(cat.id, e); }).join('') : '<div class="exp-empty">Cap moviment encara aquest mes.</div>') + '</div>'
@@ -424,9 +460,9 @@ function expenseRow(catId, e){
   + '</div>';
 }
 
-function goalsSection(){
+function goalsSection(mk){
   var objectius = state.categories.find(function(c){ return c.kind === 'goal-source'; });
-  var pot = objectius ? objectius.balance : 0;
+  var pot = objectius ? categoryAccumulatedBalance(objectius, mk) : 0;
   return '<div class="block-head"><h2>Objectius</h2><span class="hint">El pot d’objectius es reparteix entre aquestes metes</span></div>'
     + '<div class="pot-banner"><span>Pot disponible per assignar</span><span class="big">' + fmt(pot) + '</span></div>'
     + '<div class="goal-grid">' + state.goals.map(goalCard).join('') + '<button class="btn" data-action="add-goal" style="align-self:flex-start;">+ Nou objectiu</button></div>';
@@ -484,6 +520,10 @@ function normalizeState(s){
     if (!Array.isArray(c.budgetHistory) || !c.budgetHistory.length){
       c.budgetHistory = [{ date: now, value: c.budget }];
     }
+    // Superseded by budgetHistory + the dated expense ledger, which now
+    // compute "disponible acumulat" fresh every time instead of storing it.
+    delete c.balance;
+    delete c.since;
   });
   s.people.forEach(function(p){
     if (!Array.isArray(p.salaryHistory) || !p.salaryHistory.length){
@@ -726,7 +766,6 @@ function addExpense(catId, amount, note, personId){
   var cat = findCat(catId);
   if (!cat || !(amount > 0)) return;
   cat.expenses.push({ id: uid('e'), amount: amount, note: note, personId: personId, date: new Date().toISOString() });
-  cat.balance -= amount;
 }
 
 function deleteExpense(catId, expId){
@@ -734,23 +773,15 @@ function deleteExpense(catId, expId){
   if (!cat) return;
   var idx = cat.expenses.findIndex(function(e){ return e.id === expId; });
   if (idx === -1) return;
-  var wasHistoric = idx < cat.since;
-  cat.balance += cat.expenses[idx].amount;
   cat.expenses.splice(idx, 1);
-  if (wasHistoric) cat.since -= 1;
-}
-
-function advanceMonth(){
-  state.period.monthIdx++;
-  if (state.period.monthIdx > 11){ state.period.monthIdx = 0; state.period.year++; }
-  state.categories.forEach(function(c){ c.balance += c.budget; c.since = c.expenses.length; });
 }
 
 function assignToGoal(goalId, amount){
   var goal = findGoal(goalId);
   var pot = state.categories.find(function(c){ return c.kind === 'goal-source'; });
-  if (!goal || !pot || !(amount > 0) || amount > pot.balance + 0.001) return;
-  pot.balance -= amount;
+  if (!goal || !pot || !(amount > 0)) return;
+  var available = categoryAccumulatedBalance(pot, currentMonthKey());
+  if (amount > available + 0.001) return;
   pot.expenses.push({ id: uid('e'), amount: amount, note: '→ ' + goal.name, personId: null, date: new Date().toISOString(), goalId: goalId });
   goal.saved += amount;
 }
@@ -802,9 +833,7 @@ app.addEventListener('click', function(e){
   var btn = e.target.closest('[data-action]');
   if (!btn) return;
   var action = btn.dataset.action;
-  if (action === 'advance-month'){
-    advanceMonth(); render(); persist();
-  } else if (action === 'add-goal'){
+  if (action === 'add-goal'){
     addGoal(); render(); persist();
   } else if (action === 'delete-expense'){
     var key = btn.dataset.exp;
