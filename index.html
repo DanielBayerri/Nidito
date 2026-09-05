@@ -419,17 +419,22 @@ function template(){
 }
 
 function dashboardTemplate(mk){
-  var totalSalary = state.people.reduce(function(s,p){ return s + p.salary; }, 0);
   var totalBudget = state.categories.reduce(function(s,c){ return s + valueAtMonth(c.budgetHistory, mk); }, 0);
-  var totalBalance = state.categories.reduce(function(s,c){ return s + categoryAccumulatedBalance(c, mk); }, 0);
-  var totalGoals = state.goals.reduce(function(s,g){ return s + goalSaved(g); }, 0);
+  // The goal-source pot's own balance is money already earmarked for
+  // objectius (just not split into a specific goal yet) — it counts towards
+  // "Estalviat en objectius", not towards everyday spendable "Disponible
+  // conjunt ara". Spending it (directly, or via a goal's − Gastar) always
+  // reduces one of the two halves of that same objectius total.
+  var potCat = state.categories.find(function(c){ return c.kind === 'goal-source'; });
+  var potBalance = potCat ? categoryAccumulatedBalance(potCat, mk) : 0;
+  var totalBalance = state.categories.reduce(function(s,c){ return c.kind === 'goal-source' ? s : s + categoryAccumulatedBalance(c, mk); }, 0);
+  var totalGoals = potBalance + state.goals.reduce(function(s,g){ return s + goalSaved(g); }, 0);
 
   var mainCats = state.categories.filter(function(c){ return !c.archived && !c.pinnedToGoals; });
   var goalCats = state.categories.filter(function(c){ return !c.archived && c.pinnedToGoals; });
 
   return ''
   + '<div class="stats">'
-    + stat('Ingressos totals', fmt(totalSalary))
     + stat('Pressupost conjunt', fmt(totalBudget))
     + stat('Disponible conjunt ara', fmt(totalBalance), totalBalance < 0 ? 'danger' : 'good')
     + stat('Estalviat en objectius', fmt(totalGoals))
