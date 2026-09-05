@@ -419,25 +419,34 @@ function template(){
 }
 
 function dashboardTemplate(mk){
-  var totalBudget = state.categories.reduce(function(s,c){ return s + valueAtMonth(c.budgetHistory, mk); }, 0);
-  // The goal-source pot's own balance is money already earmarked for
-  // objectius (just not split into a specific goal yet) — it counts towards
-  // "Estalviat en objectius", not towards everyday spendable "Disponible
-  // conjunt ara". Spending it (directly, or via a goal's − Gastar) always
-  // reduces one of the two halves of that same objectius total.
-  var potCat = state.categories.find(function(c){ return c.kind === 'goal-source'; });
-  var potBalance = potCat ? categoryAccumulatedBalance(potCat, mk) : 0;
-  var totalBalance = state.categories.reduce(function(s,c){ return c.kind === 'goal-source' ? s : s + categoryAccumulatedBalance(c, mk); }, 0);
-  var totalGoals = potBalance + state.goals.reduce(function(s,g){ return s + goalSaved(g); }, 0);
-
   var mainCats = state.categories.filter(function(c){ return !c.archived && !c.pinnedToGoals; });
   var goalCats = state.categories.filter(function(c){ return !c.archived && c.pinnedToGoals; });
+  // Anything tied to Objectius — the goal-source pot itself, a category
+  // just pinned there like Viatges/Mascota before (or instead of) being
+  // fully converted, or the frozen leftover of one already converted — is
+  // money earmarked for objectius, kept as its own separate total/remainder
+  // pair instead of being mixed into the everyday "conjunt" ones. Spending
+  // it (directly, via a pinned category's own form, or via a goal's −
+  // Gastar) always reduces the "Estalviat en objectius" remainder.
+  var archivedCats = state.categories.filter(function(c){ return c.archived; });
+
+  var budgetConjunt = mainCats.reduce(function(s,c){ return s + valueAtMonth(c.budgetHistory, mk); }, 0);
+  var balanceConjunt = mainCats.reduce(function(s,c){ return s + categoryAccumulatedBalance(c, mk); }, 0);
+
+  // archivedMonthlyBudget keeps what a converted category used to budget
+  // monthly purely for this total — its own budget is frozen to 0 so it
+  // stops accruing a balance nobody can see or spend from anymore.
+  var budgetObjectius = goalCats.reduce(function(s,c){ return s + valueAtMonth(c.budgetHistory, mk); }, 0)
+    + archivedCats.reduce(function(s,c){ return s + (c.archivedMonthlyBudget || 0); }, 0);
+  var balanceObjectius = goalCats.concat(archivedCats).reduce(function(s,c){ return s + categoryAccumulatedBalance(c, mk); }, 0)
+    + state.goals.reduce(function(s,g){ return s + goalSaved(g); }, 0);
 
   return ''
   + '<div class="stats">'
-    + stat('Pressupost conjunt', fmt(totalBudget))
-    + stat('Disponible conjunt ara', fmt(totalBalance), totalBalance < 0 ? 'danger' : 'good')
-    + stat('Estalviat en objectius', fmt(totalGoals))
+    + stat('Pressupost conjunt', fmt(budgetConjunt))
+    + stat('Disponible conjunt ara', fmt(balanceConjunt), balanceConjunt < 0 ? 'danger' : 'good')
+    + stat('Pressupost objectius', fmt(budgetObjectius))
+    + stat('Estalviat en objectius', fmt(balanceObjectius))
   + '</div>'
   + '<section class="block">'
     + '<div class="block-head"><h2>Pots de la caixa conjunta</h2><span class="hint">El que no es gasta es queda acumulat automàticament pel mes següent</span></div>'
@@ -587,6 +596,13 @@ function normalizeState(s){
     }
     c.pinnedToGoals = !!c.pinnedToGoals;
     c.archived = !!c.archived;
+    // Backfills categories archived before archivedMonthlyBudget existed —
+    // recover what they used to budget monthly (now frozen to 0) from the
+    // highest value they ever had logged, so "Pressupost objectius" doesn't
+    // silently drop them.
+    if (c.archived && c.archivedMonthlyBudget == null){
+      c.archivedMonthlyBudget = c.budgetHistory.reduce(function(m,h){ return Math.max(m, h.value); }, 0);
+    }
     // Superseded by budgetHistory + the dated expense ledger, which now
     // compute "disponible acumulat" fresh every time instead of storing it.
     delete c.balance;
@@ -999,6 +1015,7 @@ function convertCategoryToGoal(catId){
   if (!cat || cat.archived) return;
   var oldBudget = cat.budget;
   cat.archived = true;
+  cat.archivedMonthlyBudget = oldBudget;
   if (cat.budget !== 0){
     cat.budget = 0;
     cat.budgetHistory.push({ date: new Date().toISOString(), value: 0 });
