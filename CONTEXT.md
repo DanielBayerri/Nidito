@@ -6,9 +6,15 @@ Aquest fitxer és perquè qualsevol persona (o qualsevol sessió de Claude, amb 
 
 **Caixa Comuna**: app de pressupost compartit per a una parella (Daniel i Anna). Cada categoria de despesa té un pressupost mensual, el que no es gasta s'acumula sol pel mes següent, i hi ha "pots d'objectius" (casament, casa/cotxe, etc.) alimentats des d'una categoria especial. Té una vista de Resum amb comparació mes a mes i exportació a CSV/PDF.
 
-## Estat actual (2026-08-31)
+## Estat actual (2026-09-05)
 
 Totalment funcional i en ús real pels dos. Un sol fitxer (`index.html`) sense build step, desplegat a GitHub Pages, amb Firebase com a únic "backend".
+
+**Canvis d'aquesta sessió:**
+- `fmt()` ja no arrodonia els imports a l'euro sencer — ara mostra decimals quan n'hi ha.
+- Vista de Resum: nova secció "Tots els moviments", una taula amb totes les despeses de tots els mesos (no només el mes actual), amb edició in-line (import, data, persona, nota) i el mateix patró d'esborrar-amb-confirmació ("Segur?") que ja hi havia.
+- Qualsevol categoria es pot fixar a la secció d'Objectius amb el botó 🎯/📋 de la capçalera de la targeta (`cat.pinnedToGoals`) — segueix funcionant exactament igual (pressupost mensual acumulable + despeses directes), només canvia d'on es renderitza. Per defecte Viatges/Mascota/Objectius hi comencen fixades en una instal·lació nova (`DEFAULT_STATE`), però en un document ja existent (com el de producció) cal fixar-les manualment la primera vegada — no hi ha detecció automàtica per nom/id perquè no és fiable si s'han renombrat o afegit categories.
+- **Els objectius (Casament, Casa/Cotxe, Altres) ara admeten despeses, no només aportacions.** Cada objectiu té un `expenses[]` propi (import, nota, data) per registrar quan et gastes els diners ja estalviats (p. ex. pagar el casament un cop hi ha prou estalviat). `goal.saved` ha desaparegut com a camp mutable — ara `goalSaved(goal)` el deriva sempre com `goalContributions(goal.id) - goalWithdrawalsTotal(goal)` (contribucions = despeses amb `goalId` dins la categoria "pot" `goal-source`; retirades = `goal.expenses`), seguint el mateix principi que la resta de l'app (mai un camp que es pugui desincronitzar). Les retirades també apareixen a "Tots els moviments" (marcades "(retirada)"), editables/esborrables igual que qualsevol despesa, però **no compten** a "Gastat per categoria i mes" ni al "Gastat" del resum global — ja es van comptar com a gastat quan van entrar al pot de l'objectiu, no cal comptar-los dues vegades.
 
 ## Per què aquesta arquitectura (i no una altra)
 
@@ -52,3 +58,4 @@ Totalment funcional i en ús real pels dos. Un sol fitxer (`index.html`) sense b
 
 - L'historial de pressupostos/sous només és fiable **des que aquesta funcionalitat es va desplegar** (finals d'agost 2026). Per a mesos anteriors a la primera entrada de l'historial, s'assumeix que el valor ja era l'actual — no hi ha manera de reconstruir-ho amb certesa si no es va registrar en el seu moment.
 - No hi ha manera d'afegir un tercer usuari des de l'app — cal fer-ho manualment a la consola de Firebase (crear l'usuari a Authentication + afegir el seu correu a `firestore.rules`).
+- Les retirades d'un objectiu (`goal.expenses`) sí que surten a l'exportació completa (`exportLedger`, el CSV "tots els moviments") perquè surt del mateix `buildLedger()`, però **no** apareixen desglossades a `exportMonthly` (el pivot per categoria/mes) perquè no són despesa d'una categoria — és una decisió deliberada, no un oblit.

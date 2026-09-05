@@ -162,7 +162,9 @@
   .goal-fields input{width:76px; border:none; background:transparent; color:var(--ink-muted); font-family:'JetBrains Mono',monospace; text-align:right; border-bottom:1px dashed var(--border);}
   .goal-saved{font-size:20px; font-weight:700;}
   .assign-row{display:flex; gap:6px;}
-  .assign-row input{width:90px; border:1px solid var(--border); background:var(--surface); border-radius:7px; padding:5px 7px; font-size:13px;}
+  .assign-row input{border:1px solid var(--border); background:var(--surface); border-radius:7px; padding:5px 7px; font-size:13px;}
+  .assign-row input[type="number"]{width:90px; flex-shrink:0;}
+  .assign-row input[type="text"]{flex:1; min-width:0;}
   .pot-banner{background:var(--accent-soft); color:var(--accent-strong); border-radius:12px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;}
   .pot-banner .big{font-size:20px; font-weight:700; font-family:'JetBrains Mono',monospace;}
 
@@ -200,8 +202,8 @@
   .empty-note{color:var(--ink-muted); font-size:13.5px; padding:18px;}
   .ledger-table td, .ledger-table th{white-space:normal;}
   .ledger-table .row-actions{display:flex; gap:4px; justify-content:flex-end;}
-  .ledger-table .btn-icon{background:none; border:none; color:var(--ink-muted); font-size:14px; padding:2px 4px; cursor:pointer;}
-  .ledger-table .btn-icon:hover{color:var(--accent-strong);}
+  .btn-icon{background:none; border:none; color:var(--ink-muted); font-size:14px; padding:2px 4px; cursor:pointer; flex-shrink:0;}
+  .btn-icon:hover{color:var(--accent-strong);}
   .ledger-table tr.editing td{background:var(--surface-2); padding:6px 8px;}
   .ledger-table tr.editing input, .ledger-table tr.editing select{width:100%; min-width:90px; box-sizing:border-box; padding:5px 7px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:inherit; font:inherit;}
   .ledger-table tr.editing td:nth-child(5) input{text-align:right;}
@@ -284,14 +286,14 @@ const DEFAULT_STATE = {
   "categories": [
     { "id": "c1", "name": "Casa, benzina i súper", "icon": "🏠", "budget": 1200, "expenses": [] },
     { "id": "c2", "name": "Sortir en parella", "icon": "🍽️", "budget": 300, "expenses": [] },
-    { "id": "c3", "name": "Viatges", "icon": "✈️", "budget": 500, "expenses": [] },
-    { "id": "c4", "name": "Mascota", "icon": "🐾", "budget": 150, "expenses": [] },
-    { "id": "c5", "name": "Objectius", "icon": "🎯", "budget": 450, "expenses": [], "kind": "goal-source" }
+    { "id": "c3", "name": "Viatges", "icon": "✈️", "budget": 500, "expenses": [], "pinnedToGoals": true },
+    { "id": "c4", "name": "Mascota", "icon": "🐾", "budget": 150, "expenses": [], "pinnedToGoals": true },
+    { "id": "c5", "name": "Objectius", "icon": "🎯", "budget": 450, "expenses": [], "kind": "goal-source", "pinnedToGoals": true }
   ],
   "goals": [
-    { "id": "g1", "name": "Casament", "icon": "💍", "target": 15000, "saved": 0 },
-    { "id": "g2", "name": "Casa / Cotxe", "icon": "🏡", "target": 20000, "saved": 0 },
-    { "id": "g3", "name": "Altres objectius", "icon": "⭐", "target": 5000, "saved": 0 }
+    { "id": "g1", "name": "Casament", "icon": "💍", "target": 15000, "expenses": [] },
+    { "id": "g2", "name": "Casa / Cotxe", "icon": "🏡", "target": 20000, "expenses": [] },
+    { "id": "g3", "name": "Altres objectius", "icon": "⭐", "target": 5000, "expenses": [] }
   ]
 };
 
@@ -365,6 +367,24 @@ function categoryAccumulatedBalance(cat, uptoMonthKey){
   return totalBudgeted - totalSpent;
 }
 
+// Everything a goal "has saved" is derived, same principle as category
+// balances: contributions logged against the goal-source pot (goalId-tagged
+// expenses) minus whatever has since been withdrawn/spent from that goal
+// (goal.expenses). No mutable "saved" counter to ever fall out of sync.
+function goalContributions(goalId){
+  var total = 0;
+  state.categories.forEach(function(cat){
+    cat.expenses.forEach(function(e){ if (e.goalId === goalId) total += e.amount; });
+  });
+  return total;
+}
+function goalWithdrawalsTotal(goal){
+  return (goal.expenses || []).reduce(function(s, e){ return s + e.amount; }, 0);
+}
+function goalSaved(goal){
+  return goalContributions(goal.id) - goalWithdrawalsTotal(goal);
+}
+
 function render(){
   var el = document.getElementById('app');
   if (!state){
@@ -400,7 +420,10 @@ function dashboardTemplate(mk){
   var totalSalary = state.people.reduce(function(s,p){ return s + p.salary; }, 0);
   var totalBudget = state.categories.reduce(function(s,c){ return s + valueAtMonth(c.budgetHistory, mk); }, 0);
   var totalBalance = state.categories.reduce(function(s,c){ return s + categoryAccumulatedBalance(c, mk); }, 0);
-  var totalGoals = state.goals.reduce(function(s,g){ return s + g.saved; }, 0);
+  var totalGoals = state.goals.reduce(function(s,g){ return s + goalSaved(g); }, 0);
+
+  var mainCats = state.categories.filter(function(c){ return !c.pinnedToGoals; });
+  var goalCats = state.categories.filter(function(c){ return c.pinnedToGoals; });
 
   return ''
   + '<div class="stats">'
@@ -411,10 +434,10 @@ function dashboardTemplate(mk){
   + '</div>'
   + '<section class="block">'
     + '<div class="block-head"><h2>Pots de la caixa conjunta</h2><span class="hint">El que no es gasta es queda acumulat automàticament pel mes següent</span></div>'
-    + '<div class="cat-grid">' + state.categories.map(function(c){ return categoryCard(c, mk); }).join('') + '</div>'
+    + '<div class="cat-grid">' + mainCats.map(function(c){ return categoryCard(c, mk); }).join('') + '</div>'
   + '</section>'
   + '<section class="block">'
-    + goalsSection(mk)
+    + goalsSection(mk, goalCats)
   + '</section>'
   + '<section class="block">'
     + '<div class="block-head"><h2>Diners personals</h2><span class="hint">Orientatiu — no cal quadrar-lo cada mes</span></div>'
@@ -437,7 +460,9 @@ function categoryCard(cat, mk){
 
   return '<div class="card" data-cat="' + cat.id + '">'
     + '<div class="cat-head"><span class="cat-icon">' + cat.icon + '</span>'
-      + '<input class="cat-name-input" data-field="cat-name" data-cat="' + cat.id + '" value="' + esc(cat.name) + '"></div>'
+      + '<input class="cat-name-input" data-field="cat-name" data-cat="' + cat.id + '" value="' + esc(cat.name) + '">'
+      + '<button class="btn-icon" type="button" data-action="toggle-goal-pin" data-cat="' + cat.id + '" title="' + (cat.pinnedToGoals ? 'Mou a Pots de la caixa conjunta' : 'Mou a la secció d’Objectius') + '">' + (cat.pinnedToGoals ? '📋' : '🎯') + '</button>'
+    + '</div>'
     + '<div class="budget-row"><span>Pressupost mensual</span>'
       + '<span><input class="budget-input num" type="number" min="0" step="10" data-field="cat-budget" data-cat="' + cat.id + '" value="' + cat.budget + '"> €</span></div>'
     + '<div class="progress' + (barCls?' '+barCls:'') + '"><i style="width:' + Math.round(pct*100) + '%"></i></div>'
@@ -469,28 +494,49 @@ function expenseRow(catId, e){
   + '</div>';
 }
 
-function goalsSection(mk){
+function goalsSection(mk, goalCats){
   var objectius = state.categories.find(function(c){ return c.kind === 'goal-source'; });
   var pot = objectius ? categoryAccumulatedBalance(objectius, mk) : 0;
-  return '<div class="block-head"><h2>Objectius</h2><span class="hint">El pot d’objectius es reparteix entre aquestes metes</span></div>'
+  var pinnedGrid = goalCats && goalCats.length
+    ? '<div class="cat-grid">' + goalCats.map(function(c){ return categoryCard(c, mk); }).join('') + '</div>'
+    : '';
+  return '<div class="block-head"><h2>Objectius</h2><span class="hint">Categories i metes d’estalvi — el que no es gasta s’acumula, i també se’n pot disposar</span></div>'
+    + pinnedGrid
     + '<div class="pot-banner"><span>Pot disponible per assignar</span><span class="big">' + fmt(pot) + '</span></div>'
     + '<div class="goal-grid">' + state.goals.map(goalCard).join('') + '<button class="btn" data-action="add-goal" style="align-self:flex-start;">+ Nou objectiu</button></div>';
 }
 
 function goalCard(g){
-  var pct = g.target > 0 ? clamp(g.saved / g.target, 0, 1) : 0;
+  var saved = goalSaved(g);
+  var pct = g.target > 0 ? clamp(saved / g.target, 0, 1) : 0;
   var pending = pendingDeletes[g.id];
+  var recentWithdrawals = (g.expenses || []).slice().reverse().slice(0, 4);
   return '<div class="card goal-card" data-goal="' + g.id + '">'
     + '<div class="goal-top"><span class="cat-icon">' + g.icon + '</span>'
       + '<input class="cat-name-input" data-field="goal-name" data-goal="' + g.id + '" value="' + esc(g.name) + '">'
       + '<button class="del' + (pending?' confirm':'') + '" data-action="delete-goal" data-goal="' + g.id + '">' + (pending?'Segur?':'×') + '</button></div>'
     + '<div class="goal-fields"><span>Objectiu</span><input type="number" min="0" step="100" data-field="goal-target" data-goal="' + g.id + '" value="' + g.target + '"> €</div>'
-    + '<div class="goal-saved num">' + fmt(g.saved) + ' <span style="font-size:12.5px;color:var(--ink-muted);font-weight:400;">de ' + fmt(g.target) + '</span></div>'
+    + '<div class="goal-saved num">' + fmt(saved) + ' <span style="font-size:12.5px;color:var(--ink-muted);font-weight:400;">de ' + fmt(g.target) + '</span></div>'
     + '<div class="progress"><i style="width:' + Math.round(pct*100) + '%"></i></div>'
     + '<form class="assign-row" data-action="assign-goal" data-goal="' + g.id + '">'
       + '<input type="number" step="0.01" min="0" placeholder="Import €" name="amount" required>'
-      + '<button class="btn btn-sm" type="submit">Assignar</button>'
+      + '<button class="btn btn-sm" type="submit">+ Afegir</button>'
     + '</form>'
+    + '<form class="assign-row" data-action="withdraw-goal" data-goal="' + g.id + '">'
+      + '<input type="number" step="0.01" min="0" placeholder="Import €" name="amount" required>'
+      + '<input type="text" placeholder="Nota (opcional)" name="note">'
+      + '<button class="btn btn-sm" type="submit">− Gastar</button>'
+    + '</form>'
+    + (recentWithdrawals.length ? '<div class="exp-list">' + recentWithdrawals.map(function(e){ return goalExpenseRow(g.id, e); }).join('') + '</div>' : '')
+  + '</div>';
+}
+
+function goalExpenseRow(goalId, e){
+  var pending = pendingDeletes[e.id];
+  return '<div class="exp-row">'
+    + '<span class="note">' + esc(e.note || '—') + '</span>'
+    + '<span class="amt">' + fmt(e.amount) + '</span>'
+    + '<button class="del' + (pending?' confirm':'') + '" data-action="delete-expense" data-goal="' + goalId + '" data-exp="' + e.id + '">' + (pending ? 'Segur?' : '×') + '</button>'
   + '</div>';
 }
 
@@ -529,6 +575,7 @@ function normalizeState(s){
     if (!Array.isArray(c.budgetHistory) || !c.budgetHistory.length){
       c.budgetHistory = [{ date: now, value: c.budget }];
     }
+    c.pinnedToGoals = !!c.pinnedToGoals;
     // Superseded by budgetHistory + the dated expense ledger, which now
     // compute "disponible acumulat" fresh every time instead of storing it.
     delete c.balance;
@@ -538,6 +585,12 @@ function normalizeState(s){
     if (!Array.isArray(p.salaryHistory) || !p.salaryHistory.length){
       p.salaryHistory = [{ date: now, value: p.salary }];
     }
+  });
+  s.goals.forEach(function(g){
+    if (!Array.isArray(g.expenses)) g.expenses = [];
+    // Superseded by goalContributions() - goalWithdrawalsTotal(): "saved" is
+    // now always derived from the dated ledger, never stored.
+    delete g.saved;
   });
   return s;
 }
@@ -558,15 +611,39 @@ function buildLedger(){
     cat.expenses.forEach(function(e){
       rows.push({
         id: e.id,
+        sourceType: 'category',
         date: e.date,
         month: monthKey(e.date),
         categoryId: cat.id,
+        goalRefId: null,
         category: cat.name,
         personId: e.personId,
         person: e.personId ? personName(e.personId) : '—',
         note: e.note || '',
         amount: e.amount,
         goalId: e.goalId || null
+      });
+    });
+  });
+  // Money actually spent out of a goal's savings (e.g. paying for the
+  // wedding once you've saved for it) — kept separate from contributions
+  // above so the monthly category/spend totals don't double-count it (it
+  // was already counted as spent when it left the shared pot).
+  state.goals.forEach(function(goal){
+    (goal.expenses || []).forEach(function(e){
+      rows.push({
+        id: e.id,
+        sourceType: 'goal',
+        date: e.date,
+        month: monthKey(e.date),
+        categoryId: null,
+        goalRefId: goal.id,
+        category: goal.icon + ' ' + goal.name + ' (retirada)',
+        personId: null,
+        person: '—',
+        note: e.note || '',
+        amount: e.amount,
+        goalId: null
       });
     });
   });
@@ -677,7 +754,7 @@ function resumTemplate(){
   var goalRows = state.goals.map(function(g){
     var contributions = fullLedger.filter(function(r){ return r.categoryId === goalSourceId && r.goalId === g.id; });
     var lastDate = contributions.length ? monthLabel(monthKey(contributions[contributions.length-1].date)) : '—';
-    return '<tr><td>' + g.icon + ' ' + esc(g.name) + '</td><td class="num">' + fmt(g.saved) + '</td><td class="num">' + fmt(g.target) + '</td><td>' + contributions.length + ' aportacions · última: ' + lastDate + '</td></tr>';
+    return '<tr><td>' + g.icon + ' ' + esc(g.name) + '</td><td class="num">' + fmt(goalSaved(g)) + '</td><td class="num">' + fmt(g.target) + '</td><td>' + contributions.length + ' aportacions · última: ' + lastDate + '</td></tr>';
   }).join('');
   var goalsTable = '<div class="table-scroll"><table class="report">'
     + '<thead><tr><th>Objectiu</th><th class="num">Estalviat</th><th class="num">Meta</th><th>Historial</th></tr></thead>'
@@ -733,19 +810,26 @@ function resumTemplate(){
   + '</section>';
 }
 
+function peopleOptions(selectedId){
+  return '<option value="">—</option>' + state.people.map(function(p){
+    return '<option value="' + p.id + '"' + (p.id === selectedId ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+  }).join('');
+}
+
 function expenseLedgerRow(r){
+  var isGoal = r.sourceType === 'goal';
+  var refAttr = isGoal ? 'data-goal' : 'data-cat';
+  var refId = isGoal ? r.goalRefId : r.categoryId;
   var pending = pendingDeletes[r.id];
   if (editingExpenseId === r.id){
-    var opts = '<option value="">—</option>' + state.people.map(function(p){
-      return '<option value="' + p.id + '"' + (p.id === r.personId ? ' selected' : '') + '>' + esc(p.name) + '</option>';
-    }).join('');
-    return '<tr class="editing" data-cat="' + r.categoryId + '" data-exp="' + r.id + '">'
+    var personCell = isGoal ? '<td>—</td>' : '<td><select name="person">' + peopleOptions(r.personId) + '</select></td>';
+    return '<tr class="editing" ' + refAttr + '="' + refId + '" data-exp="' + r.id + '">'
       + '<td><input type="date" name="date" value="' + r.date.slice(0,10) + '"></td>'
       + '<td>' + esc(r.category) + '</td>'
-      + '<td><select name="person">' + opts + '</select></td>'
+      + personCell
       + '<td><input type="text" name="note" value="' + esc(r.note) + '" placeholder="Nota"></td>'
       + '<td class="num"><input type="number" step="0.01" min="0" name="amount" value="' + r.amount + '" class="num"></td>'
-      + '<td class="no-print row-actions"><button class="btn btn-sm btn-primary" type="button" data-action="save-expense-edit" data-cat="' + r.categoryId + '" data-exp="' + r.id + '">Desar</button>'
+      + '<td class="no-print row-actions"><button class="btn btn-sm btn-primary" type="button" data-action="save-expense-edit" ' + refAttr + '="' + refId + '" data-exp="' + r.id + '">Desar</button>'
         + '<button class="btn btn-sm btn-ghost" type="button" data-action="cancel-edit-expense">Cancel·la</button></td>'
     + '</tr>';
   }
@@ -756,8 +840,8 @@ function expenseLedgerRow(r){
     + '<td>' + esc(r.note || '—') + '</td>'
     + '<td class="num">' + fmt(r.amount) + '</td>'
     + '<td class="no-print row-actions">'
-      + '<button class="btn-icon" data-action="edit-expense" data-cat="' + r.categoryId + '" data-exp="' + r.id + '" title="Edita">✎</button>'
-      + '<button class="del' + (pending?' confirm':'') + '" data-action="delete-expense" data-cat="' + r.categoryId + '" data-exp="' + r.id + '">' + (pending ? 'Segur?' : '×') + '</button>'
+      + '<button class="btn-icon" data-action="edit-expense" ' + refAttr + '="' + refId + '" data-exp="' + r.id + '" title="Edita">✎</button>'
+      + '<button class="del' + (pending?' confirm':'') + '" data-action="delete-expense" ' + refAttr + '="' + refId + '" data-exp="' + r.id + '">' + (pending ? 'Segur?' : '×') + '</button>'
     + '</td>'
   + '</tr>';
 }
@@ -823,11 +907,6 @@ function editExpense(catId, expId, patch){
   if (!cat) return;
   var e = cat.expenses.find(function(e){ return e.id === expId; });
   if (!e || !(patch.amount > 0)) return;
-  // goal-contribution rows mirror their amount into goal.saved — keep it in sync
-  if (e.goalId){
-    var goal = findGoal(e.goalId);
-    if (goal) goal.saved += (patch.amount - e.amount);
-  }
   e.amount = patch.amount;
   e.note = patch.note;
   e.personId = patch.personId || null;
@@ -841,12 +920,6 @@ function deleteExpense(catId, expId){
   if (!cat) return;
   var idx = cat.expenses.findIndex(function(e){ return e.id === expId; });
   if (idx === -1) return;
-  var e = cat.expenses[idx];
-  // goal-contribution rows mirror their amount into goal.saved — keep it in sync
-  if (e.goalId){
-    var goal = findGoal(e.goalId);
-    if (goal) goal.saved = Math.max(0, goal.saved - e.amount);
-  }
   cat.expenses.splice(idx, 1);
 }
 
@@ -857,11 +930,40 @@ function assignToGoal(goalId, amount){
   var available = categoryAccumulatedBalance(pot, currentMonthKey());
   if (amount > available + 0.001) return;
   pot.expenses.push({ id: uid('e'), amount: amount, note: '→ ' + goal.name, personId: null, date: new Date().toISOString(), goalId: goalId });
-  goal.saved += amount;
+}
+
+// Spending money that was already saved towards a goal (e.g. actually paying
+// for the wedding once you've saved enough) — mirrors editExpense/deleteExpense
+// but against goal.expenses instead of a category's.
+function withdrawFromGoal(goalId, amount, note){
+  var goal = findGoal(goalId);
+  if (!goal || !(amount > 0)) return;
+  var available = goalSaved(goal);
+  if (amount > available + 0.001) return;
+  goal.expenses.push({ id: uid('e'), amount: amount, note: note || '', date: new Date().toISOString() });
+}
+
+function editGoalExpense(goalId, expId, patch){
+  var goal = findGoal(goalId);
+  if (!goal) return;
+  var e = goal.expenses.find(function(e){ return e.id === expId; });
+  if (!e || !(patch.amount > 0)) return;
+  e.amount = patch.amount;
+  e.note = patch.note;
+  var time = e.date.slice(11);
+  e.date = patch.dateOnly + 'T' + time;
+}
+
+function deleteGoalExpense(goalId, expId){
+  var goal = findGoal(goalId);
+  if (!goal) return;
+  var idx = goal.expenses.findIndex(function(e){ return e.id === expId; });
+  if (idx === -1) return;
+  goal.expenses.splice(idx, 1);
 }
 
 function addGoal(){
-  state.goals.push({ id: uid('g'), name: 'Nou objectiu', icon: '⭐', target: 5000, saved: 0 });
+  state.goals.push({ id: uid('g'), name: 'Nou objectiu', icon: '⭐', target: 5000, expenses: [] });
 }
 
 // Logging these as dated history (instead of just overwriting the current
@@ -900,6 +1002,12 @@ app.addEventListener('submit', function(e){
     var amt = parseFloat(form.elements.amount.value);
     assignToGoal(form.dataset.goal, amt);
     render(); persist();
+  } else if (form.matches('[data-action="withdraw-goal"]')){
+    e.preventDefault();
+    var wAmount = parseFloat(form.elements.amount.value);
+    var wNote = form.elements.note.value.trim();
+    withdrawFromGoal(form.dataset.goal, wAmount, wNote);
+    render(); persist();
   }
 });
 
@@ -913,7 +1021,7 @@ app.addEventListener('click', function(e){
     var key = btn.dataset.exp;
     if (pendingDeletes[key]){
       delete pendingDeletes[key];
-      deleteExpense(btn.dataset.cat, key);
+      if (btn.dataset.goal){ deleteGoalExpense(btn.dataset.goal, key); } else { deleteExpense(btn.dataset.cat, key); }
       render(); persist();
     } else {
       pendingDeletes[key] = true;
@@ -930,11 +1038,20 @@ app.addEventListener('click', function(e){
     var row = btn.closest('tr');
     var amount = parseFloat(row.querySelector('[name="amount"]').value);
     var note = row.querySelector('[name="note"]').value.trim();
-    var personId = row.querySelector('[name="person"]').value;
     var dateOnly = row.querySelector('[name="date"]').value;
     if (!(amount > 0) || !dateOnly){ return; }
-    editExpense(btn.dataset.cat, btn.dataset.exp, { amount: amount, note: note, personId: personId, dateOnly: dateOnly });
+    if (btn.dataset.goal){
+      editGoalExpense(btn.dataset.goal, btn.dataset.exp, { amount: amount, note: note, dateOnly: dateOnly });
+    } else {
+      var personSel = row.querySelector('[name="person"]');
+      var personId = personSel ? personSel.value : null;
+      editExpense(btn.dataset.cat, btn.dataset.exp, { amount: amount, note: note, personId: personId, dateOnly: dateOnly });
+    }
     editingExpenseId = null;
+    render(); persist();
+  } else if (action === 'toggle-goal-pin'){
+    var pinCat = findCat(btn.dataset.cat);
+    if (pinCat) pinCat.pinnedToGoals = !pinCat.pinnedToGoals;
     render(); persist();
   } else if (action === 'delete-goal'){
     var gkey = btn.dataset.goal;
