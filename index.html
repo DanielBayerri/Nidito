@@ -165,6 +165,7 @@
   .assign-row input{border:1px solid var(--border); background:var(--surface); border-radius:7px; padding:5px 7px; font-size:13px;}
   .assign-row input[type="number"]{width:90px; flex-shrink:0;}
   .assign-row input[type="text"]{flex:1; min-width:0;}
+  .form-error{color:var(--danger); font-size:12.5px; margin-top:6px;}
   .pot-banner{background:var(--accent-soft); color:var(--accent-strong); border-radius:12px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;}
   .pot-banner .big{font-size:20px; font-weight:700; font-family:'JetBrains Mono',monospace;}
 
@@ -309,6 +310,7 @@ var MONTHS = ['Gener','Febrer','Març','Abril','Maig','Juny','Juliol','Agost','S
 var state = null;
 var pendingDeletes = {};
 var editingExpenseId = null; // per-viewer UI state, not synced
+var goalFormErrors = {}; // { goalId: message }, per-viewer UI state, not synced
 var saveTimer = null;
 var saveStatus = 'saving'; // saving | saved | offline
 var view = 'dashboard'; // dashboard | resum (per-viewer UI state, not synced)
@@ -527,6 +529,7 @@ function goalCard(g){
       + '<input type="text" placeholder="Nota (opcional)" name="note">'
       + '<button class="btn btn-sm" type="submit">− Gastar</button>'
     + '</form>'
+    + (goalFormErrors[g.id] ? '<div class="form-error">' + esc(goalFormErrors[g.id]) + '</div>' : '')
     + (recentWithdrawals.length ? '<div class="exp-list">' + recentWithdrawals.map(function(e){ return goalExpenseRow(g.id, e); }).join('') + '</div>' : '')
   + '</div>';
 }
@@ -923,24 +926,33 @@ function deleteExpense(catId, expId){
   cat.expenses.splice(idx, 1);
 }
 
+// Returns null on success, or a user-facing reason the assignment was
+// rejected — silently failing here used to leave people clicking "+ Afegir"
+// with no feedback at all when the pot didn't have enough available.
 function assignToGoal(goalId, amount){
   var goal = findGoal(goalId);
   var pot = state.categories.find(function(c){ return c.kind === 'goal-source'; });
-  if (!goal || !pot || !(amount > 0)) return;
+  if (!goal || !pot) return 'No s’ha trobat l’objectiu o el pot d’objectius.';
+  if (!(amount > 0)) return 'Escriu un import vàlid, més gran que 0.';
   var available = categoryAccumulatedBalance(pot, currentMonthKey());
-  if (amount > available + 0.001) return;
+  if (amount > available + 0.001) return 'Només hi ha ' + fmt(available) + ' disponibles al pot per assignar.';
   pot.expenses.push({ id: uid('e'), amount: amount, note: '→ ' + goal.name, personId: null, date: new Date().toISOString(), goalId: goalId });
+  return null;
 }
 
 // Spending money that was already saved towards a goal (e.g. actually paying
 // for the wedding once you've saved enough) — mirrors editExpense/deleteExpense
 // but against goal.expenses instead of a category's.
+// Same contract as assignToGoal: null on success, otherwise a user-facing
+// reason for the rejection.
 function withdrawFromGoal(goalId, amount, note){
   var goal = findGoal(goalId);
-  if (!goal || !(amount > 0)) return;
+  if (!goal) return 'No s’ha trobat l’objectiu.';
+  if (!(amount > 0)) return 'Escriu un import vàlid, més gran que 0.';
   var available = goalSaved(goal);
-  if (amount > available + 0.001) return;
+  if (amount > available + 0.001) return 'Només tens ' + fmt(available) + ' estalviats en aquest objectiu.';
   goal.expenses.push({ id: uid('e'), amount: amount, note: note || '', date: new Date().toISOString() });
+  return null;
 }
 
 function editGoalExpense(goalId, expId, patch){
@@ -1000,13 +1012,15 @@ app.addEventListener('submit', function(e){
   } else if (form.matches('[data-action="assign-goal"]')){
     e.preventDefault();
     var amt = parseFloat(form.elements.amount.value);
-    assignToGoal(form.dataset.goal, amt);
+    var assignErr = assignToGoal(form.dataset.goal, amt);
+    goalFormErrors[form.dataset.goal] = assignErr;
     render(); persist();
   } else if (form.matches('[data-action="withdraw-goal"]')){
     e.preventDefault();
     var wAmount = parseFloat(form.elements.amount.value);
     var wNote = form.elements.note.value.trim();
-    withdrawFromGoal(form.dataset.goal, wAmount, wNote);
+    var withdrawErr = withdrawFromGoal(form.dataset.goal, wAmount, wNote);
+    goalFormErrors[form.dataset.goal] = withdrawErr;
     render(); persist();
   }
 });
