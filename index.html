@@ -424,8 +424,8 @@ function dashboardTemplate(mk){
   var totalBalance = state.categories.reduce(function(s,c){ return s + categoryAccumulatedBalance(c, mk); }, 0);
   var totalGoals = state.goals.reduce(function(s,g){ return s + goalSaved(g); }, 0);
 
-  var mainCats = state.categories.filter(function(c){ return !c.pinnedToGoals; });
-  var goalCats = state.categories.filter(function(c){ return c.pinnedToGoals; });
+  var mainCats = state.categories.filter(function(c){ return !c.archived && !c.pinnedToGoals; });
+  var goalCats = state.categories.filter(function(c){ return !c.archived && c.pinnedToGoals; });
 
   return ''
   + '<div class="stats">'
@@ -459,11 +459,13 @@ function categoryCard(cat, mk){
   var barCls = pct >= 1 ? 'danger' : pct >= 0.8 ? 'warn' : '';
   var recent = cat.expenses.filter(function(e){ return monthKey(e.date) === mk; }).slice().reverse().slice(0, 6);
   var isObjectius = cat.kind === 'goal-source';
+  var pendingConvert = pendingDeletes[cat.id];
 
   return '<div class="card" data-cat="' + cat.id + '">'
     + '<div class="cat-head"><span class="cat-icon">' + cat.icon + '</span>'
       + '<input class="cat-name-input" data-field="cat-name" data-cat="' + cat.id + '" value="' + esc(cat.name) + '">'
       + '<button class="btn-icon" type="button" data-action="toggle-goal-pin" data-cat="' + cat.id + '" title="' + (cat.pinnedToGoals ? 'Mou a Pots de la caixa conjunta' : 'Mou a la secció d’Objectius') + '">' + (cat.pinnedToGoals ? '📋' : '🎯') + '</button>'
+      + (isObjectius ? '' : '<button class="btn-icon' + (pendingConvert?' confirm':'') + '" type="button" data-action="convert-to-goal" data-cat="' + cat.id + '" title="Converteix en objectiu — deixa de ser un pot amb pressupost mensual i passa a rebre assignacions com Casament o Casa/Cotxe">' + (pendingConvert ? 'Segur?' : '🏆') + '</button>')
     + '</div>'
     + '<div class="budget-row"><span>Pressupost mensual</span>'
       + '<span><input class="budget-input num" type="number" min="0" step="10" data-field="cat-budget" data-cat="' + cat.id + '" value="' + cat.budget + '"> €</span></div>'
@@ -579,6 +581,7 @@ function normalizeState(s){
       c.budgetHistory = [{ date: now, value: c.budget }];
     }
     c.pinnedToGoals = !!c.pinnedToGoals;
+    c.archived = !!c.archived;
     // Superseded by budgetHistory + the dated expense ledger, which now
     // compute "disponible acumulat" fresh every time instead of storing it.
     delete c.balance;
@@ -736,7 +739,7 @@ function resumTemplate(){
   var footCells = catCols.map(function(c){ return '<td class="num">' + fmt(catTotals[c.id]) + '</td>'; }).join('');
 
   var byCategoryTable = '<div class="table-scroll"><table class="report">'
-    + '<thead><tr><th>Mes</th>' + catCols.map(function(c){ return '<th class="num">' + c.icon + ' ' + esc(c.name) + '</th>'; }).join('') + '<th class="num">Total</th></tr></thead>'
+    + '<thead><tr><th>Mes</th>' + catCols.map(function(c){ return '<th class="num">' + c.icon + ' ' + esc(c.name) + (c.archived ? ' (arxivada)' : '') + '</th>'; }).join('') + '<th class="num">Total</th></tr></thead>'
     + '<tbody>' + monthRows + '</tbody>'
     + '<tfoot><tr class="total-row"><td>Total acumulat</td>' + footCells + '<td class="num">' + fmt(grandTotal) + '</td></tr></tfoot>'
   + '</table></div>';
@@ -978,6 +981,26 @@ function addGoal(){
   state.goals.push({ id: uid('g'), name: 'Nou objectiu', icon: '⭐', target: 5000, expenses: [] });
 }
 
+// Retires a category as an active budget pot and creates a matching goal in
+// its place, so it can be funded from the shared pot and spent from like any
+// other goal instead of accruing its own monthly budget. Deliberately does
+// NOT touch cat.expenses (nothing already registered is ever removed or
+// rewritten) and does NOT invent any synthetic "carried over balance" entry
+// — whatever the category still has accumulated stays visible and countable
+// exactly as before; moving it into the new goal is a real, dated action the
+// person does themselves via the normal "+ Afegir" assignment.
+function convertCategoryToGoal(catId){
+  var cat = findCat(catId);
+  if (!cat || cat.archived) return;
+  var oldBudget = cat.budget;
+  cat.archived = true;
+  if (cat.budget !== 0){
+    cat.budget = 0;
+    cat.budgetHistory.push({ date: new Date().toISOString(), value: 0 });
+  }
+  state.goals.push({ id: uid('g'), name: cat.name, icon: cat.icon, target: oldBudget || 500, expenses: [] });
+}
+
 // Logging these as dated history (instead of just overwriting the current
 // value) is what lets the Resum view show what the budget/income actually
 // was in a given past month, not just what it is today.
@@ -1067,6 +1090,17 @@ app.addEventListener('click', function(e){
     var pinCat = findCat(btn.dataset.cat);
     if (pinCat) pinCat.pinnedToGoals = !pinCat.pinnedToGoals;
     render(); persist();
+  } else if (action === 'convert-to-goal'){
+    var convKey = btn.dataset.cat;
+    if (pendingDeletes[convKey]){
+      delete pendingDeletes[convKey];
+      convertCategoryToGoal(convKey);
+      render(); persist();
+    } else {
+      pendingDeletes[convKey] = true;
+      render();
+      setTimeout(function(){ delete pendingDeletes[convKey]; render(); }, 4000);
+    }
   } else if (action === 'delete-goal'){
     var gkey = btn.dataset.goal;
     if (pendingDeletes[gkey]){
