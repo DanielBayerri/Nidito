@@ -59,6 +59,7 @@ Totalment funcional i en ús real pels dos. Un sol fitxer (`index.html`) sense b
   ```
   Un cop fet, revocar el token si s'ha arribat a escriure en algun lloc que no sigui la pròpia terminal.
 - GitHub Pages triga 1-2 minuts a servir la versió nova després d'un push.
+- **IMPORTANT — cada vegada que es modifiqui `index.html`, cal escriure un valor nou a `version.txt`** (una línia amb qualsevol string que canviï, p. ex. la data + un número seqüencial). Un `<script>` al `<head>` de `index.html` (2026-09-15) fa un `fetch('version.txt', {cache:'no-store'})` a cada càrrega i, si el valor no coincideix amb el que hi havia desat a `localStorage`, força una navegació a una URL amb `?v=...` nova per esquivar qualsevol caché. Es va afegir perquè els mitjancers habituals (meta tags de no-cache, esborrar i re-afegir la icona de pantalla d'inici) no van ser prou fiables per treure un mòbil (sobretot en mode "Afegit a la pantalla d'inici"/PWA standalone) d'una versió antiga en caché. Si s'oblida de bumpejar `version.txt`, aquest mecanisme simplement no detecta res nou i no fa res (fallar de manera silenciosa, no trenca res, però tampoc soluciona la caché).
 
 ## Limitacions conegudes i acceptades
 
